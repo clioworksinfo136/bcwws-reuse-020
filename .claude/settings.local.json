@@ -8,7 +8,8 @@
       "Bash(node -e \"const {generateClient} = require\\('aws-amplify/data'\\); console.log\\('ok'\\)\")",
       "Bash(Get-ChildItem -Path \"C:\\\\temp\\\\bcwws-reuse-002\\\\amplify\" -Recurse -ErrorAction SilentlyContinue)",
       "Bash(Select-Object FullName)",
-      "Bash(find C:\\\\\\\\temp\\\\\\\\bcwws-reuse-002\\\\\\\\amplify -type f -name \"*.ts\" -o -name \"*.graphql\" -o -name \"*.json\")"
+      "Bash(find C:\\\\\\\\temp\\\\\\\\bcwws-reuse-002\\\\\\\\amplify -type f -name \"*.ts\" -o -name \"*.graphql\" -o -name \"*.json\")",
+      "Bash(npx tsc *)"
     ]
   }
 }

@@ -43,14 +43,6 @@ const schema = a.schema({
       equipment: a.string(),
       locationId: a.id(),
       location: a.belongsTo('Location', 'locationId'),
-      equipments: a.hasMany('Equipment', 'dateId'),
-    })
-    .authorization((allow) => [allow.publicApiKey()]),
-  Equipment: a
-    .model({
-      equipment: a.string(),
-      dateId: a.id(),
-      date: a.belongsTo('Date', 'dateId'),
     })
     .authorization((allow) => [allow.publicApiKey()]),
 });

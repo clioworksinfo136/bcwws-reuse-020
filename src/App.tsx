@@ -78,6 +78,13 @@ const locationSelectionSet = [
 ] as const;
 type LocationItem = SelectionSet<Schema['Location']['type'], typeof locationSelectionSet>;
 
+const dateSelectionSet = [
+  'id', 'date', 'weather', 'hight', 'lowt', 'supervisor',
+  'labor', 'observation', 'remark', 'comment', 'equipment',
+  'locationId', 'createdAt', 'updatedAt',
+] as const;
+type DateItem = SelectionSet<Schema['Date']['type'], typeof dateSelectionSet>;
+
 
 const theme: Theme = {
   name: "table-theme",
@@ -214,6 +221,17 @@ function App() {
   const [editJoint, setEditJoint] = useState<string>("joint");
   const [editDate, setEditDate] = useState<string>('');
 
+  const [dateInfoList, setDateInfoList] = useState<DateItem[]>([]);
+  const [diWeather, setDiWeather] = useState("");
+  const [diHight, setDiHight] = useState<number | "">("");
+  const [diLowt, setDiLowt] = useState<number | "">("");
+  const [diSupervisor, setDiSupervisor] = useState("");
+  const [diLabor, setDiLabor] = useState<number | "">("");
+  const [diObservation, setDiObservation] = useState("");
+  const [diRemark, setDiRemark] = useState("");
+  const [diComment, setDiComment] = useState("");
+  const [diEquipment, setDiEquipment] = useState("");
+
 
 
   const options: SelectOption[] = [
@@ -273,6 +291,16 @@ function App() {
     }).subscribe({
       next: (data) => setLocation([...data.items]),
       error: (err) => console.error('observeQuery error:', err),
+    });
+    return () => sub.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const sub = client.models.Date.observeQuery({
+      selectionSet: [...dateSelectionSet],
+    }).subscribe({
+      next: (data) => setDateInfoList([...data.items]),
+      error: (err) => console.error('Date observeQuery error:', err),
     });
     return () => sub.unsubscribe();
   }, []);
@@ -507,6 +535,31 @@ function App() {
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLng / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function createDateInfo() {
+    if (!date) return;
+    client.models.Date.create({
+      date,
+      weather: diWeather || undefined,
+      hight: diHight !== "" ? Number(diHight) : undefined,
+      lowt: diLowt !== "" ? Number(diLowt) : undefined,
+      supervisor: diSupervisor || undefined,
+      labor: diLabor !== "" ? Number(diLabor) : undefined,
+      observation: diObservation || undefined,
+      remark: diRemark || undefined,
+      comment: diComment || undefined,
+      equipment: diEquipment || undefined,
+    });
+    setDiWeather("");
+    setDiHight("");
+    setDiLowt("");
+    setDiSupervisor("");
+    setDiLabor("");
+    setDiObservation("");
+    setDiRemark("");
+    setDiComment("");
+    setDiEquipment("");
   }
 
   function handleCal() {
@@ -1081,6 +1134,103 @@ function App() {
                       ))}
                     </TableBody>
 
+                  </Table>
+                </ThemeProvider>
+              </ScrollView>
+            </>)
+          },
+          {
+            label: "Date Info",
+            value: "3",
+            content: (<>
+              <ScrollView
+                as="div"
+                ariaLabel="Date Info"
+                backgroundColor="var(--amplify-colors-white)"
+                borderRadius="6px"
+                color="var(--amplify-colors-blue-60)"
+                padding="1rem"
+                height="700px"
+              >
+                <ThemeProvider theme={theme} colorMode="light">
+                  <Table caption="" highlightOnHover={false} variation="striped"
+                    style={{ width: '100%', fontFamily: 'Arial, sans-serif' }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell as="th">Date</TableCell>
+                        <TableCell as="th">Weather</TableCell>
+                        <TableCell as="th">High Temp</TableCell>
+                        <TableCell as="th">Low Temp</TableCell>
+                        <TableCell as="th">Supervisor</TableCell>
+                        <TableCell as="th">Labor</TableCell>
+                        <TableCell as="th">Observation</TableCell>
+                        <TableCell as="th">Remark</TableCell>
+                        <TableCell as="th">Comment</TableCell>
+                        <TableCell as="th">Equipment</TableCell>
+                        <TableCell as="th"></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>
+                          <input type="date" value={date} readOnly style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diWeather} placeholder="weather"
+                            onChange={e => setDiWeather(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="number" value={diHight} placeholder="high"
+                            onChange={e => setDiHight(e.target.value === "" ? "" : Number(e.target.value))} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="number" value={diLowt} placeholder="low"
+                            onChange={e => setDiLowt(e.target.value === "" ? "" : Number(e.target.value))} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diSupervisor} placeholder="supervisor"
+                            onChange={e => setDiSupervisor(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="number" value={diLabor} placeholder="labor"
+                            onChange={e => setDiLabor(e.target.value === "" ? "" : Number(e.target.value))} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diObservation} placeholder="observation"
+                            onChange={e => setDiObservation(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diRemark} placeholder="remark"
+                            onChange={e => setDiRemark(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diComment} placeholder="comment"
+                            onChange={e => setDiComment(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <input type="text" value={diEquipment} placeholder="equipment"
+                            onChange={e => setDiEquipment(e.target.value)} style={{ width: '100%' }} />
+                        </TableCell>
+                        <TableCell>
+                          <button onClick={createDateInfo} disabled={!date}>Add</button>
+                        </TableCell>
+                      </TableRow>
+                      {[...dateInfoList].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')).map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.date}</TableCell>
+                          <TableCell>{item.weather}</TableCell>
+                          <TableCell>{item.hight}</TableCell>
+                          <TableCell>{item.lowt}</TableCell>
+                          <TableCell>{item.supervisor}</TableCell>
+                          <TableCell>{item.labor}</TableCell>
+                          <TableCell>{item.observation}</TableCell>
+                          <TableCell>{item.remark}</TableCell>
+                          <TableCell>{item.comment}</TableCell>
+                          <TableCell>{item.equipment}</TableCell>
+                          <TableCell />
+                        </TableRow>
+                      ))}
+                    </TableBody>
                   </Table>
                 </ThemeProvider>
               </ScrollView>
