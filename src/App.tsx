@@ -89,7 +89,7 @@ type DateItem = SelectionSet<Schema['Date']['type'], typeof dateSelectionSet>;
 
 const trackInfoSelectionSet = [
   'id', 'track', 'geometry', 'ft2', 'yd2', 'unitprice',
-  'quan', 'value', 'numpoint', 'trip', 'cost', 'unit', 'lastdate', 'createdAt', 'updatedAt',
+  'quan', 'value', 'numpoint', 'trip', 'cost', 'unit', 'lastdate', 'color', 'createdAt', 'updatedAt',
 ] as const;
 type TrackInfoItem = SelectionSet<Schema['Track']['type'], typeof trackInfoSelectionSet>;
 
@@ -760,6 +760,7 @@ function App() {
         ...(match?.unitprice != null && { unitprice: match.unitprice }),
         ...(match?.geometry  != null && { geometry:  match.geometry  }),
         ...(match?.unit      != null && { unit:      match.unit      }),
+        ...(match?.color     != null && { color:     match.color     }),
       });
     }
 
