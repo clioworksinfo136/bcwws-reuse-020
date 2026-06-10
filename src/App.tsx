@@ -93,6 +93,10 @@ const trackInfoSelectionSet = [
 ] as const;
 type TrackInfoItem = SelectionSet<Schema['Track']['type'], typeof trackInfoSelectionSet>;
 
+const TYPE_COLOR_MAP: Record<string, string> = Object.fromEntries(
+  TRACK_DATA.filter(r => r.type && r.color).map(r => [r.type, r.color] as [string, string])
+);
+
 
 
 const theme: Theme = {
@@ -232,24 +236,16 @@ function App() {
 
   const [trackInfoList, setTrackInfoList] = useState<TrackInfoItem[]>([]);
 
-  const typeColorMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const r of TRACK_DATA) {
-      if (r.type && r.color) map[r.type] = r.color;
-    }
-    return map;
-  }, []);
-
   const coloredLocationGeoJSON = useMemo(() => ({
     ...locationGeoJSON,
     features: locationGeoJSON.features.map(f => ({
       ...f,
       properties: {
         ...f.properties,
-        color: typeColorMap[f.properties.type] ?? '#2b6cb0',
+        color: TYPE_COLOR_MAP[f.properties.type] ?? '#2b6cb0',
       },
     })),
-  }), [locationGeoJSON, typeColorMap]);
+  }), [locationGeoJSON]);
   const typeInfo1Rows = useMemo(() => {
     const groups: Record<string, { typeid1: string; type: string | null; unitprice: number | null; unit: string | null; quan: number; value: number }> = {};
     for (const t of trackInfoList) {
@@ -753,7 +749,11 @@ function App() {
     try {
       flushSync(() => setComputeStatus(["Complete Polygon: processing..."]));
       const LAT_FT = 364000;
-      const features = [];
+      const features: {
+        type: 'Feature';
+        geometry: { type: 'Polygon'; coordinates: number[][][] };
+        properties: Record<string, unknown>;
+      }[] = [];
 
       const polygonTracks = trackInfoList.filter(t => t.geometry === 'polygon');
       flushSync(() => setComputeStatus(prev => [...prev, `Complete Polygon: found ${polygonTracks.length} polygon track(s)...`]));
@@ -842,7 +842,7 @@ function App() {
           color:     'white',
           cost:      false,
         },
-      } as never);
+      });
 
       flushSync(() => setComputeStatus(prev => [...prev, `Complete Polygon: uploading ${features.length} polygon(s)...`]));
       const geojson = { type: 'FeatureCollection' as const, features };
@@ -886,11 +886,11 @@ function App() {
     // Remove Track records whose track number no longer exists in Location
     flushSync(() => setComputeStatus(prev => [...prev, "Removing Track rows with no matching Location..."]));
     const usedTracks = new Set(location.map(l => l.track));
-    for (const trackRec of sorted) {
-      if (trackRec.track == null || !usedTracks.has(trackRec.track)) {
-        await client.models.Track.delete({ id: trackRec.id });
-      }
-    }
+    await Promise.all(
+      sorted
+        .filter(t => t.track == null || !usedTracks.has(t.track))
+        .map(t => client.models.Track.delete({ id: t.id }))
+    );
 
     // Re-fetch fresh track data after Pass 0 so geometry/unitprice updates are reflected
     const { data: freshTracks } = await client.models.Track.list();
@@ -1479,7 +1479,8 @@ function App() {
                 borderRadius="6px"
                 color="var(--amplify-colors-blue-60)"
                 padding="1rem"
-                height="700px"
+                height="75vh"
+                style={{ overflowY: 'auto' }}
               >
                 <ThemeProvider theme={theme} colorMode="light">
                   <Table caption="" highlightOnHover={false} variation="striped"
