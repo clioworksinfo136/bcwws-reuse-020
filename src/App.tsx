@@ -814,6 +814,36 @@ function App() {
         return;
       }
 
+      // Add a polygon covering the White House (Washington, DC)
+      features.push({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [[
+            [-77.0387, 38.8946],
+            [-77.0387, 38.8987],
+            [-77.0344, 38.8987],
+            [-77.0344, 38.8946],
+            [-77.0387, 38.8946],
+          ]],
+        },
+        properties: {
+          id:        'white-house',
+          track:     null,
+          geometry:  'polygon',
+          ft2:       null,
+          yd2:       null,
+          unitprice: null,
+          quan:      null,
+          value:     null,
+          numpoint:  4,
+          unit:      null,
+          lastdate:  null,
+          color:     'white',
+          cost:      false,
+        },
+      } as never);
+
       flushSync(() => setComputeStatus(prev => [...prev, `Complete Polygon: uploading ${features.length} polygon(s)...`]));
       const geojson = { type: 'FeatureCollection' as const, features };
       const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
