@@ -47,6 +47,8 @@ const schema = a.schema({
       unit: a.string(),
       lastdate: a.string(),
       color: a.string(),
+      id:a.string(),
+      typeid: a.string(),
       type: a.string(),
       locations: a.hasMany('Location', 'trackId'),
     })

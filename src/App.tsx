@@ -93,8 +93,6 @@ const trackInfoSelectionSet = [
 ] as const;
 type TrackInfoItem = SelectionSet<Schema['Track']['type'], typeof trackInfoSelectionSet>;
 
-const valveSelectionSet = ['id', 'valve', 'number', 'unitprice', 'value', 'ton', 'createdAt', 'updatedAt'] as const;
-type ValveItem = SelectionSet<Schema['Valve']['type'], typeof valveSelectionSet>;
 
 
 const theme: Theme = {
@@ -178,7 +176,6 @@ function App() {
       })),
   }), [location]);
 
-  const [jointMap, setJointMap] = useState<Record<string, string | null>>({});
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   //const [report, setReport] = useState("");
@@ -188,7 +185,7 @@ function App() {
   const [length, setLength] = useState<number>(0);
   const [userName, setUserName] = useState<string>();
   const [description, setDescription] = useState<string>("");
-  const [joint, setJoint] = useState<string>("joint");
+  const joint = "joint";
   const [lat, setLat] = useState(0);
   const [lng, setLng] = useState(0);
   const [placePhotos, setPlacePhotos] = useState<File[]>([]);
@@ -234,15 +231,14 @@ function App() {
   });
 
   const [trackInfoList, setTrackInfoList] = useState<TrackInfoItem[]>([]);
-  const [valveList, setValveList] = useState<ValveItem[]>([]);
 
-  const trackColorMap = useMemo(() => {
-    const map: Record<number, string> = {};
-    for (const t of trackInfoList) {
-      if (t.track != null && t.color) map[t.track] = t.color;
+  const typeColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const r of TRACK_DATA) {
+      if (r.type && r.color) map[r.type] = r.color;
     }
     return map;
-  }, [trackInfoList]);
+  }, []);
 
   const coloredLocationGeoJSON = useMemo(() => ({
     ...locationGeoJSON,
@@ -250,14 +246,10 @@ function App() {
       ...f,
       properties: {
         ...f.properties,
-        color: f.properties.track != null ? (trackColorMap[f.properties.track] ?? '#2b6cb0') : '#2b6cb0',
+        color: typeColorMap[f.properties.type] ?? '#2b6cb0',
       },
     })),
-  }), [locationGeoJSON, trackColorMap]);
-  const [editingValveId, setEditingValveId] = useState<string | null>(null);
-  const [editValveFields, setEditValveFields] = useState({
-    number: "" as number | "", unitprice: "" as number | "", ton: "" as number | "",
-  });
+  }), [locationGeoJSON, typeColorMap]);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [editTrackFields, setEditTrackFields] = useState({
     track: "" as number | "", geometry: "line",
@@ -277,7 +269,9 @@ function App() {
 
 
 
-  const options = TRACK_DATA.map(r => ({ value: r.type, label: r.type, geometry: r.geometry }));
+  const options = TRACK_DATA
+    .map(r => ({ value: r.type, label: r.type, geometry: r.geometry }))
+    .sort((a, b) => a.geometry.localeCompare(b.geometry));
 
   //console.log(AIR_PORTS);
 
@@ -377,27 +371,6 @@ function App() {
     });
     return () => sub.unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (!client.models.Valve) {
-      console.warn('Valve model not available — redeploy sandbox to apply schema changes.');
-      return;
-    }
-    const sub = client.models.Valve.observeQuery({
-      selectionSet: [...valveSelectionSet],
-    }).subscribe({
-      next: (data) => { console.log('Valve items:', data.items); setValveList([...data.items]); },
-      error: (err) => console.error('Valve observeQuery error:', err),
-    });
-    return () => sub.unsubscribe();
-  }, []);
-
-  // Build jointMap directly from Amplify location state (no external fetch needed).
-  useEffect(() => {
-    const map: Record<string, string | null> = {};
-    location.forEach(loc => { map[loc.id] = loc.joint ?? null; });
-    setJointMap(map);
-  }, [location]);
 
   useEffect(() => {
     handleUserName();
@@ -725,17 +698,6 @@ function App() {
     setEditingTrackId(null);
   }
 
-  function saveValveInfo(id: string) {
-    const number = editValveFields.number !== "" ? Number(editValveFields.number) : undefined;
-    const unitprice = editValveFields.unitprice !== "" ? Number(editValveFields.unitprice) : undefined;
-    const ton = editValveFields.ton !== "" ? Number(editValveFields.ton) : undefined;
-    const value = (number != null && unitprice != null && ton != null)
-      ? Math.round(number * unitprice * ton * 100) / 100
-      : undefined;
-    client.models.Valve.update({ id, number, unitprice, ton, ...(value != null && { value }) });
-    setEditingValveId(null);
-  }
-
   function handleCal() {
     const sameTrack = location.filter(loc => loc.track === track);
     if (sameTrack.length === 0) {
@@ -917,9 +879,7 @@ function App() {
         const sqFt = Math.round(Math.abs(area) / 2 * 100) / 100;
         const sqYd = Math.round(sqFt / 9 * 100) / 100;
         const unit = trackRec.unit ?? '';
-        const quan = unit.toLowerCase().includes('square foot') || unit.toLowerCase().includes('sq ft')
-          ? sqFt
-          : sqYd;
+        const quan = unit === 'SF' ? sqFt : sqYd;
         await client.models.Track.update({ id: trackRec.id, numpoint: n, ft2: sqFt, yd2: sqYd, quan });
       }
     }
@@ -1104,17 +1064,6 @@ function App() {
           onChange={handleDescription}
           style={{ width: '600px' }}
         />
-        <select
-          value={joint}
-          onChange={e => setJoint(e.target.value)}
-          style={{ minWidth: '120px' }}
-        >
-          <option value="joint">joint</option>
-          <option value="#0-6 24 in 90-bend">#0-6 24 in 90-bend</option>
-          <option value="#0-6 24 in 45-bend">#0-6 24 in 45-bend</option>
-          <option value="#0-6 24 in 22.5-bend">#0-6 24 in 22.5-bend</option>
-          <option value="#0-6 24 in 11.25-bend">#0-6 24 in 11.25-bend</option>
-        </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -1221,10 +1170,14 @@ function App() {
                       'circle-color': '#e85d04',
                     }}
                   />
+                </Source>
+
+                <Source id="station-labels" type="vector" url="mapbox://qiaoxin136.fa1iqa">
                   <Layer
                     id="station-labels"
                     type="symbol"
-                    source="station"
+                    source="station-labels"
+                    source-layer="text-layer"
                     layout={{
                       'text-field': ['get', 'Text'],
                       'text-size': 10,
@@ -1499,7 +1452,6 @@ function App() {
                         <TableCell as="th" /* style={{ width: '15%' }} */>Images</TableCell>
                         <TableCell as="th" /* style={{ width: '15%' }} */>Latitude</TableCell>
                         <TableCell as="th" /* style={{ width: '15%' }} */>Longitude</TableCell>
-                        <TableCell as="th">Joint</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1533,7 +1485,6 @@ function App() {
                           <TableCell /* width="15%" */>{location.photos ? location.photos.length : 0}</TableCell>
                           <TableCell /* width="15%" */>{location.lat != null ? Number(location.lat).toFixed(6) : ''}</TableCell>
                           <TableCell /* width="15%" */>{location.lng != null ? Number(location.lng).toFixed(6) : ''}</TableCell>
-                          <TableCell>{jointMap[location.id] ?? ''}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1930,86 +1881,6 @@ function App() {
                                 });
                               }} style={{ backgroundColor: '#2b6cb0', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer', marginRight: '4px' }}>Edit</button>
                               <button onClick={() => { if (window.confirm(`Delete track ${item.track} record?`)) client.models.Track.delete({ id: item.id }); }} style={{ backgroundColor: 'red', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer' }}>Delete</button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ThemeProvider>
-              </ScrollView>
-            </>)
-          }, {
-            label: "Valve Info",
-            value: "5",
-            content: (<>
-              <ScrollView
-                as="div"
-                ariaLabel="Valve Info"
-                backgroundColor="var(--amplify-colors-white)"
-                borderRadius="6px"
-                color="var(--amplify-colors-blue-60)"
-                padding="1rem"
-                height="700px"
-              >
-                <ThemeProvider theme={theme} colorMode="light">
-                  <Table caption="" highlightOnHover={false} variation="striped"
-                    style={{ width: '100%', fontFamily: 'Arial, sans-serif' }}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell as="th">Valve</TableCell>
-                        <TableCell as="th">Number</TableCell>
-                        <TableCell as="th">Unit Price ($/ton*each)</TableCell>
-                        <TableCell as="th">Ton</TableCell>
-                        <TableCell as="th">Cost</TableCell>
-                        <TableCell as="th"></TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {[...valveList].sort((a, b) => (a.valve ?? '').localeCompare(b.valve ?? '')).map(item => {
-                        const isEditing = editingValveId === item.id;
-                        const evf = editValveFields;
-                        return isEditing ? (
-                          <TableRow key={item.id}>
-                            <TableCell>{item.valve ?? ''}</TableCell>
-                            <TableCell>
-                              <Input type="number" value={evf.number === "" ? "" : String(evf.number)}
-                                onChange={e => setEditValveFields(p => ({ ...p, number: e.target.value === "" ? "" : Number(e.target.value) }))} style={{ width: '70px' }} />
-                            </TableCell>
-                            <TableCell>
-                              <Input type="number" value={evf.unitprice === "" ? "" : String(evf.unitprice)}
-                                onChange={e => setEditValveFields(p => ({ ...p, unitprice: e.target.value === "" ? "" : Number(e.target.value) }))} style={{ width: '80px' }} />
-                            </TableCell>
-                            <TableCell>
-                              <Input type="number" value={evf.ton === "" ? "" : String(evf.ton)}
-                                onChange={e => setEditValveFields(p => ({ ...p, ton: e.target.value === "" ? "" : Number(e.target.value) }))} style={{ width: '70px' }} />
-                            </TableCell>
-                            <TableCell>
-                              {evf.number !== "" && evf.unitprice !== "" && evf.ton !== ""
-                                ? (Math.round(Number(evf.number) * Number(evf.unitprice) * Number(evf.ton) * 100) / 100)
-                                : item.value ?? ''}
-                            </TableCell>
-                            <TableCell>
-                              <button onClick={() => saveValveInfo(item.id)} style={{ backgroundColor: 'green', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer', marginRight: '4px' }}>Save</button>
-                              <button onClick={() => setEditingValveId(null)} style={{ border: 'none', padding: '4px 8px', cursor: 'pointer' }}>Cancel</button>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          <TableRow key={item.id}>
-                            <TableCell>{item.valve ?? ''}</TableCell>
-                            <TableCell>{item.number ?? ''}</TableCell>
-                            <TableCell>{item.unitprice != null ? '$' + Math.round(item.unitprice).toLocaleString('en-US') : ''}</TableCell>
-                            <TableCell>{item.ton ?? ''}</TableCell>
-                            <TableCell>{item.value != null ? '$' + Math.round(item.value).toLocaleString('en-US') : ''}</TableCell>
-                            <TableCell>
-                              <button onClick={() => {
-                                setEditingValveId(item.id);
-                                setEditValveFields({
-                                  number: item.number ?? "",
-                                  unitprice: item.unitprice ?? "",
-                                  ton: item.ton ?? "",
-                                });
-                              }} style={{ backgroundColor: '#2b6cb0', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer' }}>Edit</button>
                             </TableCell>
                           </TableRow>
                         );
