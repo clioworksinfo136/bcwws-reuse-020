@@ -39,6 +39,7 @@ const schema = a.schema({
       ft2: a.float(),
       yd2: a.float(),
       unitprice: a.float(),
+      totalprice:a.float(),
       quan: a.float(),
       value: a.float(),
       numpoint: a.integer(),

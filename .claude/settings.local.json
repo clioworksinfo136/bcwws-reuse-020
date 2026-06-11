@@ -19,7 +19,9 @@
       "Bash(grep -v \"unitprice\\\\|unitSel\\\\|unittest\\\\|//\\\\|selectionSet\\\\|createdAt\")",
       "WebFetch(domain:api.mapbox.com)",
       "Bash(curl -s \"https://api.mapbox.com/v4/qiaoxin136.fa1iqa.json?secure&access_token=pk.eyJ1IjoicWlhb3hpbjEzNiIsImEiOiJjbGU1eXcyYTMwaHRyM29tc2dncjR6ZTBhIn0.8Wa3AEGbUSnau7PCEV3Stg\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python3 lambda/trip_path/lambda_function.py)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([r['type'] for r in d]\\)\")"
     ]
   }
 }

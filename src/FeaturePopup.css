@@ -69,3 +69,44 @@
   line-height: 1;
   padding: 4px 6px;
 }
+
+/* Consistent popup buttons */
+.popup-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid #888;
+  background: #fff;
+  color: #555;
+  flex: 1;
+}
+
+.popup-btn-primary {
+  border-color: #2b6cb0;
+  background: #2b6cb0;
+  color: #fff;
+}
+
+.popup-btn-danger {
+  border-color: #c00;
+  color: #c00;
+}
+
+/* Match the native "Choose Files" button of the file input */
+.popup-file-input {
+  font-size: 11px;
+}
+
+.popup-file-input::file-selector-button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid #888;
+  background: #fff;
+  color: #555;
+  margin-right: 8px;
+}

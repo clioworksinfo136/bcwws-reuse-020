@@ -7,7 +7,7 @@ import { useAuthenticator } from '@aws-amplify/ui-react';
 import { generateClient } from "aws-amplify/data";
 import type { SelectionSet } from "aws-amplify/data";
 import "@aws-amplify/ui-react/styles.css";
-import { uploadData, remove } from "aws-amplify/storage";
+import { uploadData, remove, getUrl } from "aws-amplify/storage";
 
 import type { MapMouseEvent } from "mapbox-gl";
 
@@ -207,6 +207,7 @@ function App() {
 
   //const { data } = useGeoJSON();
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<{ longitude: number; latitude: number; date: string; type: string } | null>(null);
   const [cursor, setCursor] = useState<string>('grab');
   const [editTrack, setEditTrack] = useState<string>('');
   const [editDescription, setEditDescription] = useState<string>('');
@@ -214,6 +215,9 @@ function App() {
   const [editType, setEditType] = useState<string>('reuse');
   const [editJoint, setEditJoint] = useState<string>("joint");
   const [editDate, setEditDate] = useState<string>('');
+  const [editTime, setEditTime] = useState<string>('');
+  const [popupPhotoUrls, setPopupPhotoUrls] = useState<string[]>([]);
+  const [fullPhotoUrl, setFullPhotoUrl] = useState<string | null>(null);
 
   const [dateInfoList, setDateInfoList] = useState<DateItem[]>([]);
   const dateInfoListRef = useRef<DateItem[]>([]);
@@ -236,6 +240,14 @@ function App() {
 
   const [trackInfoList, setTrackInfoList] = useState<TrackInfoItem[]>([]);
 
+  const trackGeometryMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const t of trackInfoList) {
+      if (t.track != null && t.geometry) map[t.track] = t.geometry;
+    }
+    return map;
+  }, [trackInfoList]);
+
   const coloredLocationGeoJSON = useMemo(() => ({
     ...locationGeoJSON,
     features: locationGeoJSON.features.map(f => ({
@@ -243,9 +255,10 @@ function App() {
       properties: {
         ...f.properties,
         color: TYPE_COLOR_MAP[f.properties.type] ?? '#2b6cb0',
+        trackGeometry: f.properties.track != null ? (trackGeometryMap[f.properties.track] ?? '') : '',
       },
     })),
-  }), [locationGeoJSON]);
+  }), [locationGeoJSON, trackGeometryMap]);
   const typeInfo1Rows = useMemo(() => {
     const groups: Record<string, { typeid1: string; type: string | null; unitprice: number | null; unit: string | null; quan: number; value: number }> = {};
     for (const t of trackInfoList) {
@@ -583,6 +596,7 @@ function App() {
         updateLocation(input: $input) {
           id
           date
+          time
           track
           type
           diameter
@@ -594,6 +608,8 @@ function App() {
     try {
       const input: Record<string, unknown> = { id };
       input.date        = editDate;
+      // AWSTime expects HH:MM:SS — pad the HH:MM value from the time control
+      if (editTime) input.time = editTime.length === 5 ? `${editTime}:00` : editTime;
       input.type        = editType;
       input.description = editDescription;
       input.joint       = editJoint;
@@ -892,6 +908,16 @@ function App() {
         .map(t => client.models.Track.delete({ id: t.id }))
     );
 
+    // Remove Date records whose date no longer exists in Location
+    flushSync(() => setComputeStatus(prev => [...prev, "Removing Date rows with no matching Location..."]));
+    const usedDates = new Set(location.map(l => l.date));
+    const { data: allDates } = await client.models.Date.list();
+    await Promise.all(
+      (allDates ?? [])
+        .filter(d => d.date == null || !usedDates.has(d.date))
+        .map(d => client.models.Date.delete({ id: d.id }))
+    );
+
     // Re-fetch fresh track data after Pass 0 so geometry/unitprice updates are reflected
     const { data: freshTracks } = await client.models.Track.list();
     const freshSorted = [...(freshTracks ?? [])].sort((a, b) => (a.track ?? 0) - (b.track ?? 0));
@@ -988,7 +1014,7 @@ function App() {
     }
 
     setComputeStatus(prev => [...prev, "✓ Compute complete."]);
-    setTab("4");
+    setTab("1");
   }
 
   const onClick = useCallback((e: MapMouseEvent) => {
@@ -1025,11 +1051,35 @@ function App() {
       setEditType(props.type ?? 'reuse');
       setEditJoint(typeof match?.joint === 'string' ? match.joint : 'joint');
       setEditDate(match?.date ?? props.date ?? '');
+      setEditTime((match?.time ?? props.time ?? '').slice(0, 5));
+      setFullPhotoUrl(null);
+      setPopupPhotoUrls([]);
+      const photoPaths = (match?.photos ?? []).filter((p): p is string => !!p);
+      if (photoPaths.length > 0) {
+        Promise.all(photoPaths.map(p => getUrl({ path: p }).then(r => r.url.toString())))
+          .then(urls => setPopupPhotoUrls(urls))
+          .catch(err => console.error('Failed to resolve photo URLs:', err));
+      }
     };
   }, [location, pdfMode]);
 
   const onMouseEnter = useCallback(() => setCursor('pointer'), []);
-  const onMouseLeave = useCallback(() => setCursor('grab'), []);
+  const onMouseLeave = useCallback(() => { setCursor('grab'); setHoverInfo(null); }, []);
+
+  const onMouseMove = useCallback((event: MapMouseEvent) => {
+    const feature = event.features && event.features[0];
+    if (feature && (feature.layer?.id === 'water-points' || feature.layer?.id === 'water-points-square')) {
+      const props = feature.properties as WaterFeatureProperties;
+      setHoverInfo({
+        longitude: event.lngLat.lng,
+        latitude: event.lngLat.lat,
+        date: props.date ?? '',
+        type: props.type ?? '',
+      });
+    } else {
+      setHoverInfo(null);
+    }
+  }, []);
 
   const change_basemap = (value: string) => {
     if (value === "light") {
@@ -1168,10 +1218,11 @@ function App() {
                   height: "1000px",
                   borderColor: "#000000",
                 }}
-                interactiveLayerIds={['water-points', 'lines']}
+                interactiveLayerIds={['water-points', 'water-points-square', 'lines']}
                 onClick={onClick}
                 onMouseEnter={onMouseEnter}
                 onMouseLeave={onMouseLeave}
+                onMouseMove={onMouseMove}
                 cursor={cursor}
               >
                 <Source id="water-data" type="geojson" data={coloredLocationGeoJSON}>
@@ -1189,10 +1240,39 @@ function App() {
                         3.5,
                         3.5
                       ],
-                      'circle-color': ['coalesce', ['get', 'color'], '#2b6cb0'],
-                      'circle-stroke-color': '#ffffff',
+                      'circle-color': [
+                        'case',
+                        ['==', ['get', 'trackGeometry'], 'point'],
+                        'rgba(0,0,0,0)',
+                        ['coalesce', ['get', 'color'], '#2b6cb0'],
+                      ],
+                      'circle-stroke-color': [
+                        'case',
+                        ['==', ['get', 'trackGeometry'], 'point'],
+                        ['coalesce', ['get', 'color'], '#2b6cb0'],
+                        '#ffffff',
+                      ],
                       'circle-stroke-width': 2,
                       'circle-opacity': 0.9,
+                    }}
+                    filter={['!=', ['get', 'trackGeometry'], 'polygon']}
+                  />
+                  {/* Points on polygon tracks render as squares (text glyph — circle layers can't draw squares) */}
+                  <Layer
+                    id='water-points-square'
+                    type='symbol'
+                    source='water-data'
+                    filter={['==', ['get', 'trackGeometry'], 'polygon']}
+                    layout={{
+                      'text-field': '■',
+                      'text-size': 14,
+                      'text-allow-overlap': true,
+                      'text-ignore-placement': true,
+                    }}
+                    paint={{
+                      'text-color': ['coalesce', ['get', 'color'], '#2b6cb0'],
+                      'text-halo-color': '#ffffff',
+                      'text-halo-width': 1,
                     }}
                   />
                 </Source>
@@ -1261,6 +1341,21 @@ function App() {
                 </Source>
 
                 <Marker latitude={Number(lat)} longitude={Number(lng)} />
+                {hoverInfo && !popupInfo && (
+                  <Popup
+                    longitude={hoverInfo.longitude}
+                    latitude={hoverInfo.latitude}
+                    anchor="bottom"
+                    offset={12}
+                    closeButton={false}
+                    closeOnClick={false}
+                  >
+                    <div style={{ fontSize: '11px', lineHeight: '1.4' }}>
+                      <div><b>Date:</b> {hoverInfo.date}</div>
+                      <div><b>Type:</b> {hoverInfo.type}</div>
+                    </div>
+                  </Popup>
+                )}
                 {popupInfo && (
                   <>
                     <Popup
@@ -1272,10 +1367,6 @@ function App() {
                       closeOnClick={false}
                     >
                       <div className="popup">
-                        <h3 className="popup-title">
-                          <span className="popup-type-badge">{popupInfo.properties.type}</span>
-                          Water Infrastructure
-                        </h3>
                         <table className="popup-table">
                           <tbody>
                             <tr>
@@ -1291,46 +1382,54 @@ function App() {
                               </td>
                             </tr>
                             <tr>
+                              <td>Time</td>
+                              <td>
+                                <input
+                                  aria-label="Time"
+                                  type="time"
+                                  value={editTime}
+                                  onChange={e => setEditTime(e.target.value)}
+                                  style={{ fontSize: '11px', padding: '2px 4px', width: '100%' }}
+                                />
+                              </td>
+                            </tr>
+                            <tr>
                               <td>Type</td>
                               <td>
-                                <select
-                                  aria-label="Type"
-                                  value={editType}
-                                  onChange={e => setEditType(e.target.value)}
-                                  style={{ fontSize: '11px', padding: '2px 4px', width: '100%' }}
-                                >
-                                  <option value="F&I, Type 'F' Curb and Gutter" style={{ color: 'darkgreen' }}>F&I, Type 'F' Curb and Gutter</option>
-                                  <option value="F&I, Type 'E' Curb and Gutter" style={{ color: 'darkgreen' }}>F&I, Type 'E' Curb and Gutter</option>
-                                  <option value="F&I, Type 'D' Curb" style={{ color: 'darkgreen' }}>F&I, Type 'D' Curb</option>
-                                  <option value="Remove and Replace Existing Guard Rail" style={{ color: 'darkgreen' }}>Remove and Replace Existing Guard Rail</option>
-                                  <option value="Remove and Replace Existing Chain Link Fence" style={{ color: 'darkgreen' }}>Remove and Replace Existing Chain Link Fence</option>
-                                  <option value="Remove and Replace Existing Aluminum Fence" style={{ color: 'darkgreen' }}>Remove and Replace Existing Aluminum Fence</option>
-                                  <option value="F&I, Stabilized Subgrade" style={{ color: 'darkblue' }}>F&I, Stabilized Subgrade</option>
-                                  <option value="F&I, Limerock Base" style={{ color: 'darkblue' }}>F&I, Limerock Base</option>
-                                  <option value="F&I, Asphalt Pavement Restoration" style={{ color: 'darkblue' }}>F&I, Asphalt Pavement Restoration</option>
-                                  <option value="Mill and Resurface Asphalt Pavement" style={{ color: 'darkblue' }}>Mill and Resurface Asphalt Pavement</option>
-                                  <option value="Remove and Replace Asphalt Driveway" style={{ color: 'darkblue' }}>Remove and Replace Asphalt Driveway</option>
-                                  <option value="F&I, Asphalt Walkway" style={{ color: 'darkblue' }}>F&I, Asphalt Walkway</option>
-                                  <option value="F&I, Concrete Median" style={{ color: 'darkblue' }}>F&I, Concrete Median</option>
-                                  <option value="F&I, 6 inch Concrete Sidewalk" style={{ color: 'darkblue' }}>F&I, 6 inch Concrete Sidewalk</option>
-                                  <option value="Remove and Replace Concrete Driveway" style={{ color: 'darkblue' }}>Remove and Replace Concrete Driveway</option>
-                                  <option value="Remove and Replace Paver Driveway" style={{ color: 'darkblue' }}>Remove and Replace Paver Driveway</option>
-                                  <option value="F&I, Paver Walkway" style={{ color: 'darkblue' }}>F&I, Paver Walkway</option>
-                                  <option value="F&I, Concrete Golf Cart Path" style={{ color: 'darkblue' }}>F&I, Concrete Golf Cart Path</option>
-                                  <option value="F&I, Concrete Golf Cart Path with Rolled Curb" style={{ color: 'darkblue' }}>F&I, Concrete Golf Cart Path with Rolled Curb</option>
-                                  <option value="Restoration of Green Areas" style={{ color: 'darkblue' }}>Restoration of Green Areas</option>
-                                  <option value="Existing Minor Utility Adjustment">Existing Minor Utility Adjustment</option>
-                                  <option value="Existing Major Utility Adjustment">Existing Major Utility Adjustment</option>
-                                  <option value="Remove and Replace Existing Road Sign & Post Assembly">Remove and Replace Existing Road Sign &amp; Post Assembly</option>
-                                  <option value="Remove and Replace Existing Mailbox">Remove and Replace Existing Mailbox</option>
-                                  <option value="Restoration of Golf Course">Restoration of Golf Course</option>
-                                  <option value="Removal and Replacement of Unsuitable Material">Removal and Replacement of Unsuitable Material</option>
-                                  <option value="Replace Existing Potable Water Service">Replace Existing Potable Water Service</option>
-                                  <option value="Replace Existing Sanitary Sewer Lateral">Replace Existing Sanitary Sewer Lateral</option>
-                                  <option value="F&I, Pavement Marking and Striping">F&I, Pavement Marking and Striping</option>
-                                  <option value="R&D, Existing Trees">R&amp;D, Existing Trees</option>
-                                  <option value="F&I, Florida Number 2 Trees">F&I, Florida Number 2 Trees</option>
-                                </select>
+                                {/* Native selects can't wrap their selected value, so show it in a
+                                    wrapped 3-line box with a transparent select overlaid on top. */}
+                                <div style={{ position: 'relative' }}>
+                                  <div style={{
+                                    fontSize: '11px', padding: '2px 18px 2px 4px', width: '100%',
+                                    minHeight: '3.6em', lineHeight: '1.2em',
+                                    border: '1px solid #ccc', borderRadius: '3px',
+                                    background: '#fff', whiteSpace: 'normal', wordBreak: 'break-word',
+                                    boxSizing: 'border-box',
+                                  }}>
+                                    {editType}
+                                    <span style={{ position: 'absolute', right: '4px', top: '2px', color: '#666' }}>▾</span>
+                                  </div>
+                                  <select
+                                    aria-label="Type"
+                                    value={editType}
+                                    onChange={e => setEditType(e.target.value)}
+                                    style={{
+                                      position: 'absolute', inset: 0, width: '100%', height: '100%',
+                                      opacity: 0, cursor: 'pointer',
+                                    }}
+                                  >
+                                    {options.map((option) => {
+                                      const color = option.geometry === 'line' ? 'darkgreen'
+                                        : option.geometry === 'polygon' ? 'darkblue' : 'dimgrey';
+                                      return (
+                                        <option key={option.value} value={option.value}
+                                          style={{ color, whiteSpace: 'normal' }}>
+                                          {option.label}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
                               </td>
                             </tr>
                             <tr>
@@ -1348,77 +1447,94 @@ function App() {
                             <tr>
                               <td>Description</td>
                               <td>
-                                <input
+                                <textarea
                                   aria-label="Description"
-                                  type="text"
                                   value={editDescription}
                                   onChange={e => setEditDescription(e.target.value)}
-                                  style={{ fontSize: '11px', padding: '2px 4px', width: '100%' }}
+                                  rows={3}
+                                  style={{
+                                    fontSize: '11px', padding: '2px 4px', width: '100%',
+                                    boxSizing: 'border-box', resize: 'vertical',
+                                    fontFamily: 'inherit',
+                                  }}
                                 />
                               </td>
                             </tr>
                           </tbody>
                         </table>
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleUpdatePopup(popupInfo.properties.id); }}
-                          style={{
-                            fontSize: '11px', padding: '2px 8px', cursor: 'pointer',
-                            border: '1px solid #2b6cb0', borderRadius: '3px',
-                            background: '#fff', color: '#2b6cb0',
-                          }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => {
-                            deleteLocation(popupInfo.properties.id);
-                            setPopupInfo(null);
-                          }}
-                          style={{
-                            fontSize: '11px', padding: '2px 8px', cursor: 'pointer',
-                            border: '1px solid #c00', borderRadius: '3px',
-                            background: '#fff', color: '#c00',
-                          }}
-                        >
-                          Delete
-                        </button>
-                        </div>
-                        <br /><br />
-                        <label style={{ fontSize: '11px' }}>Place photos:</label><br />
-                        <input type="file" multiple
+                        <br />
+                        {popupPhotoUrls.length > 0 && (
+                          <>
+                            <label style={{ fontSize: '11px' }}>Photos:</label><br />
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
+                              {popupPhotoUrls.map((url, i) => (
+                                <img
+                                  key={i}
+                                  src={url}
+                                  alt={`photo ${i + 1}`}
+                                  style={{
+                                    width: '48px', height: '48px', objectFit: 'cover',
+                                    borderRadius: '3px', border: '1px solid #ccc', cursor: 'pointer',
+                                  }}
+                                  onClick={(e) => { e.stopPropagation(); setFullPhotoUrl(url); }}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        <label style={{ fontSize: '11px' }}>Add photos:</label><br />
+                        <input type="file" multiple accept="image/*"
                           onChange={(e) => previewPhotos(e)}
                           placeholder="new picture"
-                          style={{ fontSize: '11px' }}
+                          className="popup-file-input"
                         /><br /><br />
-                        <button
-                          onClick={(e) => {
-                            console.log(popupInfo.properties);
-                            handleSubmit(e, popupInfo.properties.id);
-                            setPopupInfo(null);
-                          }}
-                          style={{
-                            fontSize: '11px', padding: '2px 8px', cursor: 'pointer',
-                            border: '1px solid #555', borderRadius: '3px',
-                            background: '#fff', color: '#333',
-                          }}
-                        >
-                          Upload
-                        </button>
-                        <br /><br />
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleUpdatePopup(popupInfo.properties.id); }}
-                          style={{
-                            fontSize: '12px', padding: '4px 16px', cursor: 'pointer',
-                            border: '1px solid #2b6cb0', borderRadius: '4px',
-                            background: '#2b6cb0', color: '#fff', fontWeight: 600,
-                            width: '100%',
-                          }}
-                        >
-                          Apply
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            className="popup-btn"
+                            onClick={(e) => {
+                              console.log(popupInfo.properties);
+                              handleSubmit(e, popupInfo.properties.id);
+                              setPopupInfo(null);
+                            }}
+                          >
+                            Upload
+                          </button>
+                          <button
+                            className="popup-btn popup-btn-danger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteLocation(popupInfo.properties.id);
+                              setPopupInfo(null);
+                            }}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            className="popup-btn popup-btn-primary"
+                            onClick={(e) => { e.stopPropagation(); handleUpdatePopup(popupInfo.properties.id); }}
+                          >
+                            Apply
+                          </button>
+                        </div>
                       </div>
                     </Popup>
+                    {fullPhotoUrl && (
+                      <div
+                        onClick={() => setFullPhotoUrl(null)}
+                        style={{
+                          position: 'absolute', inset: 0, zIndex: 10,
+                          background: 'rgba(0,0,0,0.75)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          cursor: 'zoom-out',
+                        }}
+                      >
+                        <img
+                          src={fullPhotoUrl}
+                          alt="full size"
+                          style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: '4px' }}
+                        />
+                      </div>
+                    )}
 
                   </>
 
