@@ -216,8 +216,8 @@ function App() {
   const [editJoint, setEditJoint] = useState<string>("joint");
   const [editDate, setEditDate] = useState<string>('');
   const [editTime, setEditTime] = useState<string>('');
-  const [popupPhotoUrls, setPopupPhotoUrls] = useState<string[]>([]);
-  const [fullPhotoUrl, setFullPhotoUrl] = useState<string | null>(null);
+  const [popupPhotos, setPopupPhotos] = useState<{ path: string; url: string }[]>([]);
+  const [fullPhotoIndex, setFullPhotoIndex] = useState<number | null>(null);
 
   const [dateInfoList, setDateInfoList] = useState<DateItem[]>([]);
   const dateInfoListRef = useRef<DateItem[]>([]);
@@ -564,6 +564,37 @@ function App() {
   }
 
   //end Hong's addition
+
+  async function deletePopupPhoto(locId: string, path: string) {
+    if (!window.confirm('Delete this picture?')) return;
+    try {
+      await remove({ path });
+    } catch (err) {
+      console.error('Failed to delete photo from storage:', err);
+    }
+    try {
+      const { data: currentLoc } = await client.models.Location.get({ id: locId });
+      const remaining = (currentLoc?.photos ?? []).filter((p): p is string => !!p && p !== path);
+      await client.models.Location.update({ id: locId, photos: remaining });
+      const { data: fresh } = await client.models.Location.get({ id: locId });
+      if (fresh) {
+        setLocation(prev => prev.map(loc => loc.id === locId ? fresh : loc));
+      }
+    } catch (err) {
+      console.error('Failed to update photo list:', err);
+      alert('Delete failed: ' + String(err));
+      return;
+    }
+    setPopupPhotos(prev => {
+      const next = prev.filter(p => p.path !== path);
+      setFullPhotoIndex(i => {
+        if (i == null) return i;
+        if (next.length === 0) return null;
+        return Math.min(i, next.length - 1);
+      });
+      return next;
+    });
+  }
 
   async function handleUpdatePopup(id: string) {
     // Use raw GraphQL to bypass the Amplify Gen 2 client-side field-validation
@@ -1012,12 +1043,12 @@ function App() {
       setEditJoint(typeof match?.joint === 'string' ? match.joint : 'joint');
       setEditDate(match?.date ?? props.date ?? '');
       setEditTime((match?.time ?? props.time ?? '').slice(0, 5));
-      setFullPhotoUrl(null);
-      setPopupPhotoUrls([]);
+      setFullPhotoIndex(null);
+      setPopupPhotos([]);
       const photoPaths = (match?.photos ?? []).filter((p): p is string => !!p);
       if (photoPaths.length > 0) {
-        Promise.all(photoPaths.map(p => getUrl({ path: p }).then(r => r.url.toString())))
-          .then(urls => setPopupPhotoUrls(urls))
+        Promise.all(photoPaths.map(p => getUrl({ path: p }).then(r => ({ path: p, url: r.url.toString() }))))
+          .then(photos => setPopupPhotos(photos))
           .catch(err => console.error('Failed to resolve photo URLs:', err));
       }
     };
@@ -1423,20 +1454,20 @@ function App() {
                           </tbody>
                         </table>
                         <br />
-                        {popupPhotoUrls.length > 0 && (
+                        {popupPhotos.length > 0 && (
                           <>
                             <label style={{ fontSize: '11px' }}>Photos:</label><br />
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0' }}>
-                              {popupPhotoUrls.map((url, i) => (
+                              {popupPhotos.map((photo, i) => (
                                 <img
-                                  key={i}
-                                  src={url}
+                                  key={photo.path}
+                                  src={photo.url}
                                   alt={`photo ${i + 1}`}
                                   style={{
                                     width: '48px', height: '48px', objectFit: 'cover',
                                     borderRadius: '3px', border: '1px solid #ccc', cursor: 'pointer',
                                   }}
-                                  onClick={(e) => { e.stopPropagation(); setFullPhotoUrl(url); }}
+                                  onClick={(e) => { e.stopPropagation(); setFullPhotoIndex(i); }}
                                 />
                               ))}
                             </div>
@@ -1478,21 +1509,74 @@ function App() {
                         </div>
                       </div>
                     </Popup>
-                    {fullPhotoUrl && (
+                    {fullPhotoIndex != null && popupPhotos[fullPhotoIndex] && (
                       <div
-                        onClick={() => setFullPhotoUrl(null)}
+                        onClick={() => setFullPhotoIndex(null)}
                         style={{
-                          position: 'absolute', inset: 0, zIndex: 10,
+                          position: 'fixed', inset: 0, zIndex: 1000,
                           background: 'rgba(0,0,0,0.75)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           cursor: 'zoom-out',
                         }}
                       >
+                        {popupPhotos.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFullPhotoIndex((fullPhotoIndex - 1 + popupPhotos.length) % popupPhotos.length);
+                            }}
+                            style={{
+                              position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)',
+                              fontSize: '28px', padding: '8px 14px', cursor: 'pointer',
+                              border: 'none', borderRadius: '50%',
+                              background: 'rgba(255,255,255,0.85)', color: '#333',
+                            }}
+                            aria-label="Previous picture"
+                          >
+                            ‹
+                          </button>
+                        )}
                         <img
-                          src={fullPhotoUrl}
-                          alt="full size"
-                          style={{ maxWidth: '90%', maxHeight: '90%', borderRadius: '4px' }}
+                          src={popupPhotos[fullPhotoIndex].url}
+                          alt={`full size ${fullPhotoIndex + 1} of ${popupPhotos.length}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '4px', cursor: 'default' }}
                         />
+                        {popupPhotos.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFullPhotoIndex((fullPhotoIndex + 1) % popupPhotos.length);
+                            }}
+                            style={{
+                              position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)',
+                              fontSize: '28px', padding: '8px 14px', cursor: 'pointer',
+                              border: 'none', borderRadius: '50%',
+                              background: 'rgba(255,255,255,0.85)', color: '#333',
+                            }}
+                            aria-label="Next picture"
+                          >
+                            ›
+                          </button>
+                        )}
+                        <div
+                          style={{
+                            position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+                            display: 'flex', alignItems: 'center', gap: '12px',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span style={{ color: '#fff', fontSize: '13px', fontWeight: 600 }}>
+                            {fullPhotoIndex + 1} / {popupPhotos.length}
+                          </span>
+                          <button
+                            className="popup-btn popup-btn-danger"
+                            style={{ flex: 'none' }}
+                            onClick={() => deletePopupPhoto(popupInfo.properties.id, popupPhotos[fullPhotoIndex].path)}
+                          >
+                            Delete picture
+                          </button>
+                        </div>
                       </div>
                     )}
 
