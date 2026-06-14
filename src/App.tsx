@@ -334,12 +334,15 @@ function App() {
     setTime(e.target.value);
   };
 
-  const handleTrack = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleTrack = async (e: ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value);
     setTrack(val);
-    if (!isNaN(val) && !trackInfoList.some(item => item.track === val)) {
-      client.models.Track.create({ track: val });
-      setNewTrack({ track: "", geometry: "line", ft2: "", yd2: "", unitprice: "", quan: "", value: "", numpoint: "", trip: false, cost: true });
+    if (!isNaN(val)) {
+      const { data: matchingTracks } = await client.models.Track.list({ filter: { track: { eq: val } } });
+      if (!matchingTracks || matchingTracks.length === 0) {
+        await client.models.Track.create({ track: val, cost: true });
+        setNewTrack({ track: "", geometry: "line", ft2: "", yd2: "", unitprice: "", quan: "", value: "", numpoint: "", trip: false, cost: true });
+      }
     }
   };
 
@@ -437,8 +440,9 @@ function App() {
       joint: joint,
     });
 
-    if (!trackInfoList.some(t => t.track === track)) {
-      client.models.Track.create({ track, cost: true });
+    const { data: matchingTracks } = await client.models.Track.list({ filter: { track: { eq: track } } });
+    if (!matchingTracks || matchingTracks.length === 0) {
+      await client.models.Track.create({ track, cost: true });
     }
     console.log('[createLocation] date value:', date);
     const { data: existingDates, errors: listErrors } = await client.models.Date.list({ filter: { date: { eq: date } } });
@@ -1199,17 +1203,11 @@ function App() {
       <Divider orientation="horizontal" />
       <br />
       <Flex alignItems="flex-start">
-        <Button onClick={signOut} width={120}>
-          Sign out
-        </Button>
-        <Button onClick={() => setShowAdminTabs(v => !v)} backgroundColor={showAdminTabs ? "#555" : "#888"} color={"white"}>
-          {showAdminTabs ? "▲ Tab" : "▼ Tab"}
+        <Button onClick={handleCal} backgroundColor={"lightyellow"} color={"darkblue"}>
+          QC
         </Button>
         <Button onClick={createLocation} backgroundColor={"azure"} color={"red"}>
           + New
-        </Button>
-        <Button onClick={handleCal} backgroundColor={"lightyellow"} color={"darkblue"}>
-          QC
         </Button>
         <Button onClick={handleCompute} backgroundColor={"lightgreen"} color={"darkgreen"}>
           Compute
@@ -1231,6 +1229,12 @@ function App() {
             Distance: {calResult.toFixed(1)} ft
           </span>
         )}
+        <Button onClick={signOut} width={120} marginLeft="auto">
+          Sign out
+        </Button>
+        <Button onClick={() => setShowAdminTabs(v => !v)} backgroundColor={showAdminTabs ? "#555" : "#888"} color={"white"}>
+          {showAdminTabs ? "▲ Tab" : "▼ Tab"}
+        </Button>
       </Flex>
       <br />
       <Flex direction="row">
@@ -1751,7 +1755,7 @@ function App() {
                 borderRadius="6px"
                 color="var(--amplify-colors-blue-60)"
                 padding="1rem"
-                height="75vh"
+                maxHeight="calc(100vh - 120px)"
                 style={{ overflowY: 'auto' }}
               >
                 <ThemeProvider theme={theme} colorMode="light">
