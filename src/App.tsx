@@ -198,7 +198,7 @@ function App() {
   const [basemap, setBasemap] = useState("mapbox://styles/mapbox/streets-v12");
   const [pdfMode, setPdfMode] = useState(false);
   const [calResult, setCalResult] = useState<number | null>(null);
-  const [, setComputeStatus] = useState<string[]>([]);
+  const [computeStatus, setComputeStatus] = useState<string[]>([]);
   const [showAdminTabs, setShowAdminTabs] = useState<boolean>(false);
 
   //const [clickInfo, setClickInfo] = useState<DataT>();
@@ -991,8 +991,9 @@ function App() {
     flushSync(() => setComputeStatus(["Pass 0: Populating unit price, total price, geometry, unit from trackData..."]));
     const { data: existingTracks } = await client.models.Track.list();
     const trackIdByNumber: Record<number, string> = {};
+    const trackRecByNumber: Record<number, typeof existingTracks[number]> = {};
     for (const t of existingTracks ?? []) {
-      if (t.track != null) trackIdByNumber[t.track] = t.id;
+      if (t.track != null) { trackIdByNumber[t.track] = t.id; trackRecByNumber[t.track] = t; }
     }
     const locationTrackNumbers = [...new Set(location.map(l => l.track).filter((t): t is number => t != null))]
       .sort((a, b) => a - b);
@@ -1010,6 +1011,7 @@ function App() {
       await client.models.Track.update({
         id: trackId,
         trip: true,
+        ...(trackRecByNumber[trackNo]?.width === 0 && { width: 1 }),
         ...(match?.unitprice != null && { unitprice: match.unitprice }),
         ...(match?.totalprice != null && { totalprice: match.totalprice }),
         ...(match?.geometry  != null && { geometry:  match.geometry  }),
@@ -1061,7 +1063,8 @@ function App() {
       }
 
       if (trackRec.geometry === 'line') {
-        const total = Math.round(pts.reduce((s, p) => s + (p.length ?? 0), 0) * 100) / 100;
+        const sumLength = pts.reduce((s, p) => s + (p.length ?? 0), 0);
+        const total = Math.round(sumLength * (trackRec.width ?? 1) * 100) / 100;
         await client.models.Track.update({ id: trackRec.id, quan: total });
 
       } else if (trackRec.geometry === 'point') {
@@ -1119,7 +1122,6 @@ function App() {
 
     setComputeStatus(prev => [...prev, "✓ Compute complete."]);
     setTab("1");
-    setTimeout(() => setComputeStatus([]), 2000);
   }
 
   const onClick = useCallback((e: MapMouseEvent) => {
@@ -1227,6 +1229,22 @@ function App() {
           {showAdminTabs ? "▲ Tab" : "▼ Tab"}
         </Button>
       </Flex>
+      {computeStatus.length > 0 && (
+        <div style={{
+          margin: "8px 0",
+          padding: "10px 14px",
+          backgroundColor: "#f0fff4",
+          border: "1px solid #9ae6b4",
+          borderRadius: "6px",
+          fontFamily: "monospace",
+          fontSize: "13px",
+          color: "#22543d",
+        }}>
+          {computeStatus.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
       <br />
       <Flex direction="row">
 

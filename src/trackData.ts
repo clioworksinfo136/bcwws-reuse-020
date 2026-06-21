@@ -32,10 +32,10 @@ color:  'red', unit: "Cubic Yard" },
   { typeid1: '#0-14', typeid:'#0-14',type: 'Excavation in Hard Rock', geometry: 'line', unitprice: 33.00, totalprice: 49500.00,color: 'red', unit:"FT"},
   { typeid1: '#0-15', typeid:'#0-15',type: 'Minor Utility Adjustment', geometry: 'point', unitprice: 2708.00, totalprice: 81240.00,color: 'red', unit: "EA" },
   { typeid1: '#0-16', typeid:'#0-16',type: 'Major Utility Adjustment', geometry: 'point', unitprice:5417.00, totalprice:81255.00,color:'red',unit:"EA" },
-  { typeid1:'#0-17',typeid:'#0-17',type:'Stabilized Subgrade',geometry:'polygon',unitprice:15.00,totalprice:216000.00, color:'grey',unit:"SY" },
+  { typeid1:'#0-17',typeid:'#0-17',type:'Stabilized Subgrade A',geometry:'line',unitprice:15.00,totalprice:216000.00, color:'grey',unit:"SY" },
   { typeid1:'#0-18',typeid:'#0-18',type:'Limerock Base',geometry:'polygon',unitprice:48.75,totalprice:737100.00,color:'grey',unit:"SY" },
-   {typeid1: '#0-19', typeid:'#0-19',type: 'Asphalt Pavement Restoration', geometry: 'polygon', unitprice: 31.00,totalprice:492156.00, color: 'grey', unit: "SY" },
-  { typeid1: '#0-20', typeid:'#0-20',type: 'Mill and Resurface Asphalt Pavement', geometry: 'polygon', unitprice: 19.00, totalprice: 934800.00, color: 'grey', unit: "SY" },
+   {typeid1: '#0-19', typeid:'#0-19',type: 'Asphalt Pavement Restoration A', geometry: 'line', unitprice: 31.00,totalprice:492156.00, color: 'grey', unit: "SY" },
+  { typeid1: '#0-20', typeid:'#0-20',type: 'Mill and Resurface Asphalt Pavement A', geometry: 'line', unitprice: 19.00, totalprice: 934800.00, color: 'grey', unit: "SY" },
   { typeid1: '#0-21', typeid:'#0-21',type: "Pavement Marking & Striping", geometry: 'line', unitprice: 168750.00, totalprice:168750.00,color: 'black', unit: "LS" },
   { typeid1: '#0-22', typeid:'#0-22',type: "Type F Curb and Gutter", geometry: 'line', unitprice: 49.00, totalprice:221970.00,color: 'black', unit: "FT" },
   { typeid1: '#0-23', typeid:'#0-23',type: "Type E Curb and Gutter", geometry: 'line', unitprice: 56.00, totalprice:28560.00,color: 'black', unit: "FT" },
@@ -62,6 +62,9 @@ color:  'red', unit: "Cubic Yard" },
   { typeid1: '#0-44', typeid:'#0-44',type: 'Florida Number 2 Trees', geometry: 'point', unitprice: 5000.00, totalprice:5000.00,color: 'light green', unit: "EA" },
   { typeid1: '#0-45', typeid:'#0-45',type: '24 inch Ductile Iron Pipe, Class 250 (Bid Alternate to Base Bid 0-4)', geometry: 'line', unitprice: 437.00, totalprice:7798265.00,color: 'purple', unit: "FT"},
   { typeid1: '#0-46', typeid:'#0-46',type: '30 inch Ductile Iron Pipe, Class 250 (Bid Alternate to Base Bid 0-5)', geometry:'line',unitprice:658.0,totalprice:5922.00,color:'purple',unit:"FT"},
+  {typeid1: '#0-47', typeid:'#0-47',type: 'Asphalt Pavement Restoration B', geometry: 'polygon', unitprice: 31.00,totalprice:492156.00, color: 'grey', unit: "SY" },
+  { typeid1: '#0-48', typeid:'#0-48',type: 'Mill and Resurface Asphalt Pavement B', geometry: 'polygon', unitprice: 19.00, totalprice: 934800.00, color: 'grey', unit: "SY" },
+  { typeid1:'#0-49',typeid:'#0-49',type:'Stabilized Subgrade B',geometry:'polygon',unitprice:15.00,totalprice:216000.00, color:'grey',unit:"SY" }
 ];
 
 export const TRACK_TYPES = TRACK_DATA.map(r => r.type);
