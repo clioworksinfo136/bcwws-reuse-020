@@ -1329,6 +1329,7 @@ function App() {
                   zoom: 16,
                 }}
                 mapboxAccessToken={MAPBOX_TOKEN}
+                maxZoom={23}
                 //mapLib={maplibregl}
                 mapStyle={basemap} // Use any MapLibre-compatible style
 
