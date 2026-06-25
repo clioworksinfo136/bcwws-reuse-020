@@ -75,7 +75,7 @@ const client = generateClient<Schema>();
 
 const locationSelectionSet = [
   'id', 'date', 'time', 'track', 'type', 'diameter',
-  'length', 'lat', 'lng', 'username', 'description',
+  'width', 'length', 'lat', 'lng', 'username', 'description',
   'photos', 'joint', 'createdAt', 'updatedAt',
 ] as const;
 type LocationItem = SelectionSet<Schema['Location']['type'], typeof locationSelectionSet>;
@@ -186,6 +186,7 @@ function App() {
   const [track, setTrack] = useState<number>(0);
   const [type, setType] = useState<string>(TRACK_DATA[0]?.type ?? "");
   const [diameter, setDiameter] = useState<number>(0);
+  const [width, setWidth] = useState<number>(0);
   const [length, setLength] = useState<number>(0);
   const [userName, setUserName] = useState<string>();
   const [description, setDescription] = useState<string>("");
@@ -196,7 +197,7 @@ function App() {
 
   const [tab, setTab] = useState("1");
   const [basemap, setBasemap] = useState("mapbox://styles/mapbox/streets-v12");
-  const [pdfMode, setPdfMode] = useState(false);
+  const [pdfMode] = useState(false);
   const [calResult, setCalResult] = useState<number | null>(null);
   const [computeStatus, setComputeStatus] = useState<string[]>([]);
   const [showAdminTabs, setShowAdminTabs] = useState<boolean>(false);
@@ -212,6 +213,7 @@ function App() {
   const [editTrack, setEditTrack] = useState<string>('');
   const [editDescription, setEditDescription] = useState<string>('');
   const [editDiameter, setEditDiameter] = useState<string>('');
+  const [editWidth, setEditWidth] = useState<string>('');
   const [editType, setEditType] = useState<string>('reuse');
   const [editJoint, setEditJoint] = useState<string>("joint");
   const [editDate, setEditDate] = useState<string>('');
@@ -260,6 +262,29 @@ function App() {
     })),
   }), [locationGeoJSON, trackGeometryMap]);
   const [historySort, setHistorySort] = useState<{ key: 'date' | 'track' | 'type' | 'images'; dir: 1 | -1 } | null>(null);
+
+  // Highest track number across all Location records — recomputes whenever location changes.
+  const maxTrack = useMemo(() => {
+    const tracks = location.map(l => l.track).filter((t): t is number => t != null);
+    return tracks.length > 0 ? Math.max(...tracks) : null;
+  }, [location]);
+
+  const [showTrackTypes, setShowTrackTypes] = useState(false);
+
+  // Distinct (track, type) pairs from Location, no duplicates, sorted by track.
+  const trackTypePairs = useMemo(() => {
+    const seen = new Set<string>();
+    const pairs: { track: number; type: string }[] = [];
+    for (const l of location) {
+      if (l.track == null) continue;
+      const type = l.type ?? '';
+      const key = `${l.track}|${type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ track: l.track, type });
+    }
+    return pairs.sort((a, b) => a.track - b.track || a.type.localeCompare(b.type));
+  }, [location]);
 
   const sortedHistory = useMemo(() => {
     const rows = [...location];
@@ -434,6 +459,7 @@ function App() {
       track: track,
       type: type,
       diameter: diameter,
+      width: width,
       length: calResult !== null ? calResult : length,
       username: name,
       description: description,
@@ -462,6 +488,7 @@ function App() {
     setTrack(track);
     setType(type);
     setDiameter(diameter);
+    setWidth(width);
     setUserName("");
     setDescription("");
     setLat(0);
@@ -642,6 +669,7 @@ function App() {
           track
           type
           diameter
+          width
           description
           joint
         }
@@ -657,8 +685,10 @@ function App() {
       input.joint       = editJoint;
       const parsedTrack    = parseInt(editTrack);
       const parsedDiameter = parseFloat(editDiameter);
+      const parsedWidth    = parseFloat(editWidth);
       if (editTrack    !== '' && !isNaN(parsedTrack))    input.track    = parsedTrack;
       if (editDiameter !== '' && !isNaN(parsedDiameter)) input.diameter = parsedDiameter;
+      input.width = editWidth !== '' && !isNaN(parsedWidth) ? parsedWidth : null;
 
       console.log('Updating via GraphQL:', input);
       const result = await (client as any).graphql({ query: mutation, variables: { input } });
@@ -989,6 +1019,31 @@ function App() {
     const LAT_FT = 364000;
     const sorted = [...trackInfoList].sort((a, b) => (a.track ?? 0) - (b.track ?? 0));
 
+    // Pavement line types whose Track.width is averaged from their Location points' width.
+    const AVG_WIDTH_TYPES = [
+      'Stabilized Subgrade-L',
+      'Limerock Base-L',
+      'Asphalt Pavement Restoration-L',
+      'Mill and Resurface Asphalt Pavement-L',
+    ];
+
+    // Validation: every Location point of these types must have a width filled in.
+    // If any has width 0 or null, warn and stop so the user can fill them first.
+    const missingWidth = location.filter(
+      l => l.type != null && AVG_WIDTH_TYPES.includes(l.type) && (l.width == null || l.width === 0)
+    );
+    if (missingWidth.length > 0) {
+      const lines = missingWidth
+        .map(l => `  - Track ${l.track ?? '?'}, ${l.date ?? ''} ${l.time ?? ''} (${l.type})`)
+        .join('\n');
+      alert(
+        `Compute stopped: ${missingWidth.length} point(s) of width-based pavement types have no width.\n\n` +
+        `Please go back to the History Data tab and fill in the width for these points before running Compute:\n\n` +
+        lines
+      );
+      return;
+    }
+
     // Pass 0: populate unitprice and geometry from trackData.ts by matching Location type → TRACK_DATA.
     // Drive off the track numbers actually present in Location and upsert the Track row, so newly
     // added tracks (whose Track record may not be in trackInfoList yet) are also populated.
@@ -1039,6 +1094,25 @@ function App() {
       flushSync(() => setComputeStatus(prev => [...prev,
         `  • Track ${trackNo} (${pts.length} pt${pts.length === 1 ? '' : 's'}, ${created ? 'created' : 'existing'}): ${detail}${widthSet ? ', width set to 1' : ''}`]));
     }
+
+    // Pass 0b: for the specific pavement line types, set Track.width to the average
+    // of the width of all Location points sharing that track number.
+    flushSync(() => setComputeStatus(prev => [...prev, "Pass 0: Averaging Location width for pavement line tracks..."]));
+    const { data: tracksForAvg } = await client.models.Track.list();
+    for (const trackRec of tracksForAvg ?? []) {
+      if (trackRec.type == null || !AVG_WIDTH_TYPES.includes(trackRec.type)) continue;
+      const widths = location
+        .filter(l => l.track === trackRec.track && l.width != null)
+        .map(l => l.width as number);
+      if (widths.length === 0) {
+        flushSync(() => setComputeStatus(prev => [...prev, `  • Track ${trackRec.track} ("${trackRec.type}"): no point widths — unchanged`]));
+        continue;
+      }
+      const avgWidth = Math.round((widths.reduce((s, w) => s + w, 0) / widths.length) * 100) / 100;
+      await client.models.Track.update({ id: trackRec.id, width: avgWidth });
+      flushSync(() => setComputeStatus(prev => [...prev, `  • Track ${trackRec.track} ("${trackRec.type}"): avg width = ${avgWidth} (from ${widths.length} pt${widths.length === 1 ? '' : 's'})`]));
+    }
+
     flushSync(() => setComputeStatus(prev => [...prev, `Pass 0 done — processed ${locationTrackNumbers.length} track(s).`]));
 
     // Remove Track records whose track number no longer exists in Location
@@ -1173,6 +1247,7 @@ function App() {
       setEditTrack(props.track != null ? String(props.track) : '');
       setEditDescription(props.description ?? '');
       setEditDiameter(props.diameter != null ? String(props.diameter) : '');
+      setEditWidth(match?.width != null ? String(match.width) : '');
       setEditType(props.type ?? 'reuse');
       setEditJoint(typeof match?.joint === 'string' ? match.joint : 'joint');
       setEditDate(match?.date ?? props.date ?? '');
@@ -1233,7 +1308,7 @@ function App() {
           Compute
         </Button>
         <Button onClick={handleCompletePolygon} backgroundColor={"steelblue"} color={"white"}>
-          Complete Polygon
+          Complete Area
         </Button>
         {calResult !== null && (
           <span style={{ alignSelf: "center", fontWeight: "bold" }}>
@@ -1295,6 +1370,13 @@ function App() {
           onChange={handleTrack}
           style={{ width: '50px' }}
         />
+        <input
+          type="number"
+          value={width}
+          placeholder="width"
+          onChange={e => setWidth(e.target.value === "" ? 0 : Number(e.target.value))}
+          style={{ width: '50px' }}
+        />
         <SelectField
           label="Select an option"
           labelHidden={true}
@@ -1323,19 +1405,17 @@ function App() {
           onChange={handleDescription}
           style={{ width: '600px' }}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={pdfMode}
-            onChange={e => setPdfMode(e.target.checked)}
-          />
-          {pdfMode ? 'PDF Mode' : 'Marker Mode'}
-        </label>
+        <button
+          onClick={() => setShowTrackTypes(true)}
+          title="Show all track / type values"
+          style={{ alignSelf: 'center', marginLeft: 'auto', fontSize: '18px', fontWeight: 'bold', color: '#1a365d', whiteSpace: 'nowrap', background: '#ebf4ff', border: '1px solid #1a365d', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer' }}
+        >
+          Max Track: {maxTrack ?? '—'}
+        </button>
         {/* <Input type="number" value={Number(lat.toFixed(10))} />
         <Input type="number" value={Number(lng.toFixed(10))} /> */}
       </Flex>
       <Divider orientation="horizontal" />
-      <br />
       <Tabs
         value={tab}
         onValueChange={(tab) => setTab(tab)}
@@ -1588,6 +1668,18 @@ function App() {
                               </td>
                             </tr>
                             <tr>
+                              <td>Width</td>
+                              <td>
+                                <input
+                                  aria-label="Width"
+                                  type="number"
+                                  value={editWidth}
+                                  onChange={e => setEditWidth(e.target.value)}
+                                  style={{ fontSize: '11px', padding: '2px 4px', width: '100%' }}
+                                />
+                              </td>
+                            </tr>
+                            <tr>
                               <td>Description</td>
                               <td>
                                 <textarea
@@ -1806,6 +1898,7 @@ function App() {
                         <TableCell as="th" onClick={() => toggleHistorySort('date')} style={{ cursor: 'pointer', userSelect: 'none' }}>Date{historySortArrow('date')}</TableCell>
                         <TableCell as="th" /* style={{ width: '15%' }} */>Time</TableCell>
                         <TableCell as="th" onClick={() => toggleHistorySort('track')} style={{ cursor: 'pointer', userSelect: 'none' }}>Track{historySortArrow('track')}</TableCell>
+                        <TableCell as="th">Width</TableCell>
                         <TableCell as="th" onClick={() => toggleHistorySort('type')} style={{ cursor: 'pointer', userSelect: 'none' }}>Type{historySortArrow('type')}</TableCell>
                         <TableCell as="th" /* style={{ width: '15%' }} */>User</TableCell>
                         <TableCell as="th" /* style={{ width: '15%' }} */>Length</TableCell>
@@ -1833,6 +1926,7 @@ function App() {
                           <TableCell /* width="15%" */>{location.date}</TableCell>
                           <TableCell /* width="15%" */>{location.time}</TableCell>
                           <TableCell /* width="10%" */>{location.track}</TableCell>
+                          <TableCell /* width="10%" */>{location.width != null ? location.width : ''}</TableCell>
                           <TableCell /* width="15%" */>{location.type}</TableCell>
                           <TableCell /* width="15%" */>{location.username}</TableCell>
                           <TableCell /* width="15%" */>{location.length != null ? Math.round(Number(location.length)) : ''}</TableCell>
@@ -2260,6 +2354,45 @@ function App() {
           }] : []),
         ]}
       />
+
+      {showTrackTypes && (
+        <div
+          onClick={() => setShowTrackTypes(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '8px', padding: '16px', width: '440px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 4px 24px rgba(0,0,0,0.35)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ margin: 0, color: '#1a365d' }}>Track / Type ({trackTypePairs.length})</h3>
+              <button
+                onClick={() => setShowTrackTypes(false)}
+                style={{ border: 'none', background: 'transparent', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #1a365d', textAlign: 'left' }}>
+                  <th style={{ padding: '4px 8px', width: '80px' }}>Track</th>
+                  <th style={{ padding: '4px 8px' }}>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trackTypePairs.map((p, i) => (
+                  <tr key={`${p.track}|${p.type}`} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 ? '#f7fafc' : '#fff' }}>
+                    <td style={{ padding: '4px 8px' }}>{p.track}</td>
+                    <td style={{ padding: '4px 8px' }}>{p.type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
     </main>
   );
