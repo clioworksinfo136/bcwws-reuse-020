@@ -1347,64 +1347,79 @@ function App() {
         </div>
       )}
       <br />
-      <Flex direction="row">
+      <Flex direction="row" alignItems="flex-end" className="toolbar-inputs">
 
-        <input
-          type="date"
-          value={date}
-          placeholder="date"
-          onChange={handleDate}
-        width="80px"
-        />
-        <input
-          type="time"
-          value={time}
-          placeholder="time"
-          onChange={handleTime}
-          style={{ width: '80px' }}
-        />
-        <input
-          type="number"
-          value={track}
-          placeholder="track"
-          onChange={handleTrack}
-          style={{ width: '50px' }}
-        />
-        <input
-          type="number"
-          value={width}
-          placeholder="width"
-          onChange={e => setWidth(e.target.value === "" ? 0 : Number(e.target.value))}
-          style={{ width: '50px' }}
-        />
-        <SelectField
-          label="Select an option"
-          labelHidden={true}
-          value={type}
-          onChange={handleSelectChange}
-        //width="100%"
-        >
-          {options.map((option) => {
-            const color = option.geometry === 'line' ? 'darkgreen'
-              : option.geometry === 'polygon' ? 'darkblue' : 'dimgrey';
-            return (
-              <option key={option.value} value={option.value}
-                style={{ color, fontWeight: 'bold' }}>
-                {option.label}
-              </option>
-            );
-          })}
-        </SelectField>
-
-
-  
-        <Input
-          type="text"
-          value={description}
-          placeholder="description"
-          onChange={handleDescription}
-          style={{ width: '600px' }}
-        />
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Date</span>
+          <input
+            type="date"
+            value={date}
+            placeholder="date"
+            onChange={handleDate}
+            style={{ width: '80px', height: '42px', boxSizing: 'border-box' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Time</span>
+          <input
+            type="time"
+            value={time}
+            placeholder="time"
+            onChange={handleTime}
+            style={{ width: '80px', height: '42px', boxSizing: 'border-box' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Track</span>
+          <input
+            type="number"
+            value={track}
+            placeholder="track"
+            onChange={handleTrack}
+            style={{ width: '50px', height: '42px', boxSizing: 'border-box' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Width</span>
+          <input
+            type="number"
+            value={width}
+            placeholder="width"
+            onChange={e => setWidth(e.target.value === "" ? 0 : Number(e.target.value))}
+            style={{ width: '50px', height: '42px', boxSizing: 'border-box' }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Type</span>
+          <SelectField
+            label="Select an option"
+            labelHidden={true}
+            value={type}
+            onChange={handleSelectChange}
+          //width="100%"
+          >
+            {options.map((option) => {
+              const color = option.geometry === 'line' ? 'darkgreen'
+                : option.geometry === 'polygon' ? 'darkblue' : 'dimgrey';
+              return (
+                <option key={option.value} value={option.value}
+                  style={{ color, fontWeight: 'bold' }}>
+                  {option.label}
+                </option>
+              );
+            })}
+          </SelectField>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <span style={{ fontSize: '10px', color: '#666' }}>Description</span>
+          <Input
+            type="text"
+            value={description}
+            placeholder="description"
+            onChange={handleDescription}
+            style={{ width: '600px' }}
+          />
+        </label>
         <button
           onClick={() => setShowTrackTypes(true)}
           title="Show all track / type values"
