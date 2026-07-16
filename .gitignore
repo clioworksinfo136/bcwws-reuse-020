@@ -39,3 +39,7 @@ DerivedData/
 
 # Old Xcode project (renamed to WashingtonPark.xcodeproj)
 test.xcodeproj/
+
+# Python
+__pycache__/
+*.py[cod]

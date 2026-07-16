@@ -48,6 +48,14 @@ const stationApi = new apigw.LambdaRestApi(stationStack, 'StationIdApi', {
   handler: stationLambda,
   proxy: true,
   defaultMethodOptions: { authorizationType: apigw.AuthorizationType.NONE },
+  // CORS: the frontend is served from a different domain than execute-api,
+  // so browsers block cross-origin fetch() calls unless the API opts in.
+  // The Lambda also returns Access-Control-Allow-* on every response and
+  // answers the OPTIONS preflight directly (proxy routes OPTIONS to it).
+  defaultCorsPreflightOptions: {
+    allowOrigins: apigw.Cors.ALL_ORIGINS,
+    allowMethods: apigw.Cors.ALL_METHODS,
+  },
 });
 
 backend.addOutput({
