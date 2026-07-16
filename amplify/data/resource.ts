@@ -27,6 +27,7 @@ const schema = a.schema({
       photos: a.string().array(),
       comments: a.ref('Comment').array(),
       joint: a.string(),
+      station: a.string(),
       dateId: a.id(),
       date_record: a.belongsTo('Date', 'dateId'),
       trackId: a.id(),
@@ -57,16 +58,7 @@ const schema = a.schema({
       locations: a.hasMany('Location', 'trackId'),
     })
     .authorization((allow) => [allow.publicApiKey()]),
-  Valve: a
-    .model({
-      valve: a.string(),
-      number: a.integer(),
-      unitprice: a.float(),
-      value: a.float(),
-      ton: a.float(),
-      cost: a.boolean(),
-    })
-    .authorization((allow) => [allow.publicApiKey()]),
+
   Date: a
     .model({
       date: a.date(),
@@ -79,6 +71,8 @@ const schema = a.schema({
       remark: a.string(),
       comment: a.string(),
       equipment: a.string(),
+      station: a.string(), 
+      feet: a.integer(), 
       locations: a.hasMany('Location', 'dateId'),
     })
     .authorization((allow) => [allow.publicApiKey()]),
