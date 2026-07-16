@@ -2188,6 +2188,8 @@ function App() {
                     <TableHead>
                       <TableRow>
                         <TableCell as="th">Date</TableCell>
+                        <TableCell as="th">Station</TableCell>
+                        <TableCell as="th">Feet</TableCell>
                         <TableCell as="th">Weather</TableCell>
                         <TableCell as="th">High Temp</TableCell>
                         <TableCell as="th">Low Temp</TableCell>
@@ -2228,6 +2230,8 @@ function App() {
                         <TableCell>
                           <input type="date" value={date} readOnly style={{ width: '100%' }} />
                         </TableCell>
+                        <TableCell style={{ fontSize: '11px' }}>—</TableCell>
+                        <TableCell style={{ fontSize: '11px' }}>—</TableCell>
                         <TableCell>
                           <input type="text" value={diWeather} placeholder="weather"
                             onChange={e => setDiWeather(e.target.value)} style={{ width: '100%' }} />
@@ -2279,6 +2283,8 @@ function App() {
                               <input type="date" value={ef.date}
                                 onChange={e => setEf('date', e.target.value)} style={{ width: '100%' }} />
                             </TableCell>
+                            <TableCell style={{ fontSize: '11px' }}>{item.station ?? '—'}</TableCell>
+                            <TableCell style={{ fontSize: '11px' }}>{item.feet ?? '—'}</TableCell>
                             <TableCell>
                               <input type="text" value={ef.weather}
                                 onChange={e => setEf('weather', e.target.value)} style={{ width: '100%' }} />
@@ -2344,6 +2350,8 @@ function App() {
                         ) : (
                           <TableRow key={item.id}>
                             <TableCell>{item.date}</TableCell>
+                            <TableCell>{item.station ?? '—'}</TableCell>
+                            <TableCell>{item.feet ?? '—'}</TableCell>
                             <TableCell>{item.weather}</TableCell>
                             <TableCell>{item.hight}</TableCell>
                             <TableCell>{item.lowt}</TableCell>
