@@ -64,6 +64,30 @@ def _load_points() -> List[Tuple[float, float, str]]:
     return pts
 
 
+def _load_sta_fklh() -> dict:
+    """Build a {STA: max FKLH} map from station-id.json.
+
+    STA is not unique — one STA label can appear at many points along the line,
+    each with its own FKLH (footage/chainage). We keep the maximum FKLH per STA
+    so the lookup yields a single, monotonic-with-stationing value.
+    """
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    m: dict = {}
+    for feat in data.get("features", []):
+        try:
+            props = feat.get("properties", {})
+            sta = props.get("STA")
+            fklh = props.get("FKLH")
+        except (AttributeError, TypeError):
+            continue
+        if sta is None or fklh is None:
+            continue
+        if sta not in m or fklh > m[sta]:
+            m[sta] = fklh
+    return m
+
+
 # ---------------------------------------------------------------------------
 # KD-tree (2-D) — pure standard library.
 # ---------------------------------------------------------------------------
@@ -128,7 +152,7 @@ def _nearest_k(node, target: Tuple[float, float], k: int) -> List[Tuple[float, T
 
 
 # Cached state (rebuilt only on cold starts).
-_CACHE: dict = {"tree": None}
+_CACHE: dict = {"tree": None, "sta_fklh": None}
 
 
 def _get_tree():
@@ -137,13 +161,20 @@ def _get_tree():
     return _CACHE["tree"]
 
 
+def _get_sta_fklh():
+    if _CACHE["sta_fklh"] is None:
+        _CACHE["sta_fklh"] = _load_sta_fklh()
+    return _CACHE["sta_fklh"]
+
+
 def _format_hit(d_sq: float, point: Tuple[float, float, str]) -> dict:
     _lng_scaled, lat, sta = point
     dist_m = math.sqrt(d_sq) * _M_PER_DEG
     # Recover the original longitude from the scaled value.
     lng = point[0] / _LNG_SCALE
+    fklh = _get_sta_fklh().get(sta)
     return {"sta": sta, "distance_m": round(dist_m, 2),
-            "lat": lat, "lng": lng}
+            "lat": lat, "lng": lng, "fklh": fklh}
 
 
 def _get_query(event):
