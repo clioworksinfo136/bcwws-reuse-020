@@ -1404,14 +1404,14 @@ function App() {
         <Button onClick={createLocation} backgroundColor={"azure"} color={"red"}>
           + New
         </Button>
+        <Button onClick={handleStation} backgroundColor={"#6b4f9e"} color={"white"}>
+          Station
+        </Button>
         <Button onClick={handleCompute} backgroundColor={"lightgreen"} color={"darkgreen"}>
           Compute
         </Button>
         <Button onClick={handleCompletePolygon} backgroundColor={"steelblue"} color={"white"}>
           Complete Area
-        </Button>
-        <Button onClick={handleStation} backgroundColor={"#6b4f9e"} color={"white"}>
-          Station
         </Button>
         {calResult !== null && (
           <span style={{ alignSelf: "center", fontWeight: "bold" }}>
