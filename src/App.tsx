@@ -1497,11 +1497,11 @@ function App() {
         <Button onClick={handleStation} backgroundColor={"#6b4f9e"} color={"white"}>
           Station
         </Button>
-        <Button onClick={handleDateBatch} backgroundColor={"#7a5230"} color={"white"}>
-          Date
-        </Button>
         <Button onClick={handleCompute} backgroundColor={"lightgreen"} color={"darkgreen"}>
           Compute
+        </Button>
+        <Button onClick={handleDateBatch} backgroundColor={"#7a5230"} color={"white"}>
+          Date
         </Button>
         <Button onClick={handleCompletePolygon} backgroundColor={"steelblue"} color={"white"}>
           Complete Area
