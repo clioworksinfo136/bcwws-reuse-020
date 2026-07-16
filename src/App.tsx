@@ -220,6 +220,7 @@ function App() {
   const [editTime, setEditTime] = useState<string>('');
   const [popupPhotos, setPopupPhotos] = useState<{ path: string; url: string }[]>([]);
   const [fullPhotoIndex, setFullPhotoIndex] = useState<number | null>(null);
+  const [stationLineUrl, setStationLineUrl] = useState<string>();
 
   const [dateInfoList, setDateInfoList] = useState<DateItem[]>([]);
   const dateInfoListRef = useRef<DateItem[]>([]);
@@ -442,6 +443,13 @@ function App() {
 
   useEffect(() => {
     handleUserName();
+  }, []);
+
+  // Resolve the station polyline GeoJSON uploaded to Amplify storage (geojson/station-line.json).
+  useEffect(() => {
+    getUrl({ path: 'geojson/station-line.json' })
+      .then(result => setStationLineUrl(result.url.toString()))
+      .catch(err => console.error('Failed to resolve station-line URL:', err));
   }, []);
 
 
@@ -1245,14 +1253,6 @@ function App() {
     const feature = e.features?.[0];
 
     //console.log("clicked feature =", feature);
-    if (feature?.layer?.id === 'lines' && pdfMode) {
-      const dn = feature.properties?.DN;
-      if (dn != null) {
-        window.open(`https://bcwws-reuse.s3.us-east-1.amazonaws.com/FM${dn}.pdf`, '_blank');
-      }
-      return;
-    }
-
     if (!feature || feature.geometry.type !== 'Point') {
       //console.log(e);
       setLat(e.lngLat.lat);
@@ -1456,7 +1456,7 @@ function App() {
                   height: "1000px",
                   borderColor: "#000000",
                 }}
-                interactiveLayerIds={['water-points', 'water-points-square', 'lines']}
+                interactiveLayerIds={['water-points', 'water-points-square']}
                 onClick={onClick}
                 onMouseEnter={onMouseEnter}
                 onMouseLeave={onMouseLeave}
@@ -1515,21 +1515,6 @@ function App() {
                   />
                 </Source>
 
-                <Source id="lines" type="vector" url="mapbox://qiaoxin136.6712mnvq">
-                  <Layer
-                    id='lines'
-                    type='line'
-                    source='lines'
-                    source-layer="line-34gbbu"
-                    paint={{
-                      'line-width': 1,
-                      // Use a get expression (https://docs.mapbox.comhttps://docs.mapbox.com/style-spec/reference/expressions/#get)
-                      // to set the line-color to a feature property value.
-                      'line-color': "#c7a0ca",
-                      'line-dasharray': [4, 2]
-                    }}
-                  />
-                </Source>
                 <Source id="tick" type="vector" url="mapbox://qiaoxin136.3axmzn09">
                   <Layer
                     id='tick'
@@ -1557,6 +1542,21 @@ function App() {
                     }}
                   />
                 </Source>
+
+                {stationLineUrl && (
+                  <Source id="station-line" type="geojson" data={stationLineUrl}>
+                    <Layer
+                      id="station-line"
+                      type="line"
+                      source="station-line"
+                      paint={{
+                        'line-width': 1,
+                        'line-color': '#ff8aff',
+                        'line-dasharray': [8, 6]
+                      }}
+                    />
+                  </Source>
+                )}
 
                 <Source id="station-labels" type="vector" url="mapbox://qiaoxin136.fa1iqa">
                   <Layer
