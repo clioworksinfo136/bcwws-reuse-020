@@ -84,7 +84,7 @@ type LocationItem = SelectionSet<Schema['Location']['type'], typeof locationSele
 const dateSelectionSet = [
   'id', 'date', 'weather', 'hight', 'lowt', 'supervisor',
   'labor', 'observation', 'remark', 'comment', 'equipment',
-  'createdAt', 'updatedAt',
+  'station', 'feet', 'createdAt', 'updatedAt',
 ] as const;
 type DateItem = SelectionSet<Schema['Date']['type'], typeof dateSelectionSet>;
 
@@ -1069,6 +1069,96 @@ function App() {
       `✓ Station assignment complete — updated: ${updated}, skipped: ${skipped}, failed: ${failed}.`]);
   }
 
+  // For each Date entry, find the latest Location record whose date+time is at
+  // or before that Date, take its nearest-station STA (the Location's "station"
+  // field, populated by the Station button), and write:
+  //   - the STA into the Date's "station" field;
+  //   - the STA's FKLH (footage/chainage) from station-id.json into "feet".
+  //
+  // STA -> FKLH is one-to-many in station-id.json, so we keep the maximum FKLH
+  // per STA (monotonic with stationing), matching the Lambda's behavior.
+  async function handleDateBatch() {
+    if (dateInfoList.length === 0) {
+      alert("No Date entries to process.");
+      return;
+    }
+    if (location.length === 0) {
+      alert("No Location records to derive stations from.");
+      return;
+    }
+
+    // Build the STA -> max FKLH map once from the bundled station-id.json so we
+    // don't have to call the Lambda per Date entry.
+    setShowStationStatus(true);
+    setStationStatus(["Loading station FKLH lookup..."]);
+    let staFklh: Record<string, number>;
+    try {
+      const resp = await fetch('/station-id.json');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const geo = await resp.json() as { features?: { properties?: { STA?: string; FKLH?: number } }[] };
+      staFklh = {};
+      for (const f of geo.features ?? []) {
+        const sta = f.properties?.STA;
+        const fklh = f.properties?.FKLH;
+        if (sta != null && fklh != null && (staFklh[sta] == null || fklh > staFklh[sta])) {
+          staFklh[sta] = fklh;
+        }
+      }
+      flushSync(() => setStationStatus(prev => [...prev,
+        `Loaded ${Object.keys(staFklh).length} STA → FKLH mapping(s).`]));
+    } catch (err) {
+      setStationStatus(prev => [...prev, `✗ Failed to load station-id.json — ${String(err)}`]);
+      return;
+    }
+
+    // Pre-sort Locations by date+time so each Date lookup is a cheap scan.
+    const sortedLocs = [...location]
+      .filter(l => l.date != null)
+      .sort((a, b) => `${a.date ?? ''}T${a.time ?? ''}`.localeCompare(`${b.date ?? ''}T${b.time ?? ''}`));
+
+    flushSync(() => setStationStatus(prev => [...prev,
+      `Processing ${dateInfoList.length} Date entr(ies) against ${sortedLocs.length} Location record(s)...`]));
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+    const sortedDates = [...dateInfoList].sort((a, b) =>
+      (a.date ?? '').localeCompare(b.date ?? ''));
+
+    for (let i = 0; i < sortedDates.length; i++) {
+      const d = sortedDates[i];
+      const cutoff = d.date ?? '';
+      // Latest Location with date+time <= this Date's date (inclusive of the day).
+      const eligible = sortedLocs.filter(l => (l.date ?? '') <= cutoff);
+      const latest = eligible[eligible.length - 1];
+      if (!latest) {
+        skipped++;
+        flushSync(() => setStationStatus(prev => [...prev,
+          `  • [${i + 1}/${sortedDates.length}] date=${cutoff}: no earlier Location, skipped`]));
+        continue;
+      }
+      const sta = latest.station ?? null;
+      const fklh = sta != null ? (staFklh[sta] ?? null) : null;
+      try {
+        await client.models.Date.update({
+          id: d.id,
+          station: sta ?? undefined,
+          feet: fklh ?? undefined,
+        });
+        updated++;
+        flushSync(() => setStationStatus(prev => [...prev,
+          `  • [${i + 1}/${sortedDates.length}] date=${cutoff}: latest loc id=${latest.id} → STA ${sta ?? '—'}, feet ${fklh ?? '—'}`]));
+      } catch (err) {
+        failed++;
+        flushSync(() => setStationStatus(prev => [...prev,
+          `  • [${i + 1}/${sortedDates.length}] date=${cutoff}: update failed — ${String(err)}`]));
+      }
+    }
+
+    setStationStatus(prev => [...prev,
+      `✓ Date processing complete — updated: ${updated}, skipped: ${skipped}, failed: ${failed}.`]);
+  }
+
   // Export point-geometry track locations to geojson/point.geojson.
   // For each Location, look up the linked Track by track number; keep only point-geometry
   // tracks. Every Location sharing a track number is exported as its own feature.
@@ -1407,6 +1497,9 @@ function App() {
         <Button onClick={handleStation} backgroundColor={"#6b4f9e"} color={"white"}>
           Station
         </Button>
+        <Button onClick={handleDateBatch} backgroundColor={"#7a5230"} color={"white"}>
+          Date
+        </Button>
         <Button onClick={handleCompute} backgroundColor={"lightgreen"} color={"darkgreen"}>
           Compute
         </Button>
@@ -1439,7 +1532,7 @@ function App() {
           }}
         >
           <Flex justifyContent="space-between" alignItems="center">
-            <strong style={{ color: "#6b4f9e" }}>Station Assignment Progress</strong>
+            <strong style={{ color: "#6b4f9e" }}>Batch Job Progress</strong>
             <Button size="small" onClick={() => setShowStationStatus(false)}>Close</Button>
           </Flex>
           <ScrollView
