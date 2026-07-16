@@ -71,9 +71,20 @@ const schema = a.schema({
       remark: a.string(),
       comment: a.string(),
       equipment: a.string(),
-      station: a.string(), 
-      feet: a.integer(), 
+      station: a.string(),
+      feet: a.integer(),
       locations: a.hasMany('Location', 'dateId'),
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
+  Valve: a
+    .model({
+      valve: a.string(),
+      number: a.integer(),
+      unitprice: a.float(),
+      value: a.float(),
+      ton: a.float(),
+      cost: a.boolean(),
     })
     .authorization((allow) => [allow.publicApiKey()]),
 });
