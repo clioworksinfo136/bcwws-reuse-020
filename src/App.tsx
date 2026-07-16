@@ -2,6 +2,7 @@ import type { ChangeEvent, SyntheticEvent } from "react";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import type { Schema } from "../amplify/data/resource";
+import outputs from "../amplify_outputs.json";
 import { checkLoginAndGetName } from "./utils/AuthUtils";
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import { generateClient } from "aws-amplify/data";
@@ -76,7 +77,7 @@ const client = generateClient<Schema>();
 const locationSelectionSet = [
   'id', 'date', 'time', 'track', 'type', 'diameter',
   'width', 'length', 'lat', 'lng', 'username', 'description',
-  'photos', 'joint', 'createdAt', 'updatedAt',
+  'photos', 'joint', 'station', 'createdAt', 'updatedAt',
 ] as const;
 type LocationItem = SelectionSet<Schema['Location']['type'], typeof locationSelectionSet>;
 
@@ -200,6 +201,10 @@ function App() {
   const [pdfMode] = useState(false);
   const [calResult, setCalResult] = useState<number | null>(null);
   const [, setComputeStatus] = useState<string[]>([]);
+  // Progress window for long-running batch jobs (e.g. Station assignment).
+  const [stationStatus, setStationStatus] = useState<string[]>([]);
+  const [showStationStatus, setShowStationStatus] = useState(false);
+  const stationLogRef = useRef<HTMLDivElement | null>(null);
   const [showAdminTabs, setShowAdminTabs] = useState<boolean>(false);
 
   //const [clickInfo, setClickInfo] = useState<DataT>();
@@ -451,6 +456,12 @@ function App() {
       .then(result => setStationLineUrl(result.url.toString()))
       .catch(err => console.error('Failed to resolve station-line URL:', err));
   }, []);
+
+  // Auto-scroll the Station progress log to the latest line.
+  useEffect(() => {
+    const el = stationLogRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [stationStatus]);
 
 
 
@@ -994,6 +1005,69 @@ function App() {
     }
   }
 
+  // Assign the nearest station ("STA") to every Location record.
+  //
+  // Iterates each Location point, calls the public nearest-station Lambda
+  // (StationIdApi) with the point's lat/lng, takes the returned "STA", and
+  // writes it into the Location's "station" field. Progress is streamed into
+  // the Station progress window so the user can watch it go point by point.
+  async function handleStation() {
+    const apiUrl = (outputs as { custom?: { stationApiUrl?: string } }).custom?.stationApiUrl;
+    if (!apiUrl) {
+      alert("Station API URL is not configured. Run 'npx ampx sandbox' to deploy the backend, then redeploy.");
+      return;
+    }
+
+    const points = location.filter(
+      l => l.lat != null && l.lng != null
+    );
+    if (points.length === 0) {
+      alert("No Location points with coordinates to process.");
+      return;
+    }
+
+    setShowStationStatus(true);
+    setStationStatus([
+      `Assigning nearest station to ${points.length} of ${location.length} Location point(s)...`,
+    ]);
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const lat = p.lat as number;
+      const lng = p.lng as number;
+      try {
+        const url = `${apiUrl}?lat=${lat}&lng=${lng}&k=1`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const body = await resp.json() as { sta?: string; distance_m?: number };
+        const sta = body.sta;
+        if (!sta) {
+          skipped++;
+          flushSync(() => setStationStatus(prev => [...prev,
+            `  • [${i + 1}/${points.length}] id=${p.id}: no STA returned, skipped`]));
+          continue;
+        }
+        await client.models.Location.update({ id: p.id, station: sta });
+        updated++;
+        flushSync(() => setStationStatus(prev => [...prev,
+          `  • [${i + 1}/${points.length}] id=${p.id} → STA ${sta} (${body.distance_m ?? '?'} m)`]));
+      } catch (err) {
+        failed++;
+        flushSync(() => setStationStatus(prev => [...prev,
+          `  • [${i + 1}/${points.length}] id=${p.id}: failed — ${String(err)}`]));
+      }
+    }
+
+    setStationStatus(prev => [...prev,
+      `✓ Station assignment complete — updated: ${updated}, skipped: ${skipped}, failed: ${failed}.`]);
+  }
+
   // Export point-geometry track locations to geojson/point.geojson.
   // For each Location, look up the linked Track by track number; keep only point-geometry
   // tracks. Every Location sharing a track number is exported as its own feature.
@@ -1335,6 +1409,9 @@ function App() {
         <Button onClick={handleCompletePolygon} backgroundColor={"steelblue"} color={"white"}>
           Complete Area
         </Button>
+        <Button onClick={handleStation} backgroundColor={"#6b4f9e"} color={"white"}>
+          Station
+        </Button>
         {calResult !== null && (
           <span style={{ alignSelf: "center", fontWeight: "bold" }}>
             Distance: {calResult.toFixed(1)} ft
@@ -1347,6 +1424,39 @@ function App() {
           {showAdminTabs ? "▲ Tab" : "▼ Tab"}
         </Button>
       </Flex>
+      {showStationStatus && (
+        <Flex
+          direction="column"
+          style={{
+            margin: "8px 0",
+            padding: "8px",
+            border: "1px solid #6b4f9e",
+            borderRadius: "6px",
+            backgroundColor: "#faf8ff",
+            width: "100%",
+            maxWidth: "900px",
+          }}
+        >
+          <Flex justifyContent="space-between" alignItems="center">
+            <strong style={{ color: "#6b4f9e" }}>Station Assignment Progress</strong>
+            <Button size="small" onClick={() => setShowStationStatus(false)}>Close</Button>
+          </Flex>
+          <ScrollView
+            ref={stationLogRef}
+            height="220px"
+            width="100%"
+            style={{ backgroundColor: "#fff", border: "1px solid #ddd", borderRadius: "4px" }}
+          >
+            <pre style={{
+              margin: 0, padding: "8px",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "12px", lineHeight: "1.4", whiteSpace: "pre-wrap", wordBreak: "break-word",
+            }}>
+              {stationStatus.join("\n")}
+            </pre>
+          </ScrollView>
+        </Flex>
+      )}
       <br />
       <Flex direction="row" alignItems="flex-end" className="toolbar-inputs">
 
