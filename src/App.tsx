@@ -177,6 +177,7 @@ function App() {
           length:      loc.length ?? null,
           description: loc.description ?? '',
           joint:       loc.joint ?? null,
+          station:     loc.station ?? null,
         },
       })),
   }), [location]);
@@ -1341,7 +1342,7 @@ function App() {
       setPopupInfo({
         longitude: lng,
         latitude: lat,
-        properties: { ...props, joint: match?.joint ?? null },
+        properties: { ...props, joint: match?.joint ?? null, station: match?.station ?? props.station ?? null },
       });
       setEditTrack(props.track != null ? String(props.track) : '');
       setEditDescription(props.description ?? '');
@@ -1819,6 +1820,12 @@ function App() {
                                     fontFamily: 'inherit',
                                   }}
                                 />
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>Station</td>
+                              <td style={{ fontSize: '11px', padding: '2px 4px' }}>
+                                {popupInfo.properties.station ?? '—'}
                               </td>
                             </tr>
                           </tbody>
