@@ -172,19 +172,40 @@ def _get_query(event):
     return merged
 
 
+def _respond(status_code: int, payload: dict) -> dict:
+    """Wrap a payload as an API Gateway response with CORS headers.
+
+    CORS headers are required so browsers can call this API cross-origin
+    (the frontend is served from a different domain than execute-api).
+    Applied to every response, including errors, so the browser always
+    receives them.
+    """
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+        "body": json.dumps(payload),
+    }
+
+
 def lambda_handler(event, context):
+    # Answer the CORS preflight request directly so the browser can proceed
+    # to the real GET. (event is sometimes {} on direct invoke -> skip.)
+    if isinstance(event, dict) and event.get("httpMethod") == "OPTIONS":
+        return _respond(204, {})
+
     body = _get_query(event)
 
     try:
         lat = float(body["lat"])
         lng = float(body["lng"])
     except (KeyError, TypeError, ValueError):
-        return {
-            "statusCode": 400,
-            "body": json.dumps(
-                {"error": "Request must include numeric 'lat' and 'lng'."}
-            ),
-        }
+        return _respond(
+            400, {"error": "Request must include numeric 'lat' and 'lng'."}
+        )
 
     k = body.get("k")
     try:
@@ -194,7 +215,7 @@ def lambda_handler(event, context):
 
     tree = _get_tree()
     if tree is None:
-        return {"statusCode": 500, "body": json.dumps({"error": "No station data loaded."})}
+        return _respond(500, {"error": "No station data loaded."})
 
     target = (lng * _LNG_SCALE, lat)
     hits = _nearest_k(tree, target, k)
@@ -204,7 +225,7 @@ def lambda_handler(event, context):
     else:
         result = {"nearest": [_format_hit(d, p) for d, p in hits]}
 
-    return {"statusCode": 200, "body": json.dumps(result)}
+    return _respond(200, result)
 
 
 if __name__ == "__main__":
